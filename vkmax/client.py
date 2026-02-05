@@ -122,40 +122,46 @@ class MaxClient:
         self._reconnect_callback = function
 
     async def _recv_loop(self):
-        try:
-            async for packet in self._connection:
+        while True:
+            try:
+                packet = await self._connection.recv()
                 packet = json.loads(packet)
 
-                seq = packet["seq"]
-                future = self._pending.pop(seq, None)
+            except asyncio.CancelledError:
+                _logger.info('receiver cancelled')
+                return
+
+            except websockets.exceptions.ConnectionClosed:
+                _logger.warning('got ws disconnect in receiver')
+                if self._reconnect_callback:
+                    _logger.info('reconnecting')
+                    await self._reconnect_callback()
+                return
+
+            except json.JSONDecodeError:
+                _logger.warning('could not decode packet')
+                continue
+
+            seq = packet["seq"]
+            future = self._pending.pop(seq, None)
+            if future:
+                future.set_result(packet)
+                continue
+
+            if packet.get("opcode") == 136:
+                payload = packet.get("payload", {})
+                future = None
+
+                if "videoId" in payload:
+                    future = self._video_pending.pop(payload["videoId"], None)
+                elif "fileId" in payload:
+                    future = self._file_pending.pop(payload["fileId"], None)
+
                 if future:
-                    future.set_result(packet)
-                    continue
-
-                if packet.get("opcode") == 136:
-                    payload = packet.get("payload", {})
-                    future = None
-
-                    if "videoId" in payload:
-                        future = self._video_pending.pop(payload["videoId"], None)
-                    elif "fileId" in payload:
-                        future = self._file_pending.pop(payload["fileId"], None)
-
-                    if future:
-                        future.set_result(None)
-                
-                if self._incoming_event_callback:
-                    asyncio.create_task(self._incoming_event_callback(self, packet))
-
-        except asyncio.CancelledError:
-            _logger.info(f'receiver cancelled')
-            return
-
-        except websockets.exceptions.ConnectionClosed:
-            _logger.warning('got ws disconnect in receiver')
-            if self._reconnect_callback:
-                _logger.info('reconnecting')
-                await self._reconnect_callback()
+                    future.set_result(None)
+            
+            if self._incoming_event_callback:
+                asyncio.create_task(self._incoming_event_callback(self, packet))
 
     # --- Keepalive system
 
