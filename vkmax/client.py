@@ -131,13 +131,18 @@ class MaxClient:
                 _logger.info('receiver cancelled')
                 return
 
-            except websockets.exceptions.ConnectionClosed as err:
+            except websockets.exceptions.ConnectionClosedError as err:
                 _logger.warning('got ws disconnect in receiver')
                 if not self._is_logged_in:
                     raise err
                 if self._reconnect_callback:
                     _logger.info('reconnecting')
                     asyncio.create_task(self._reconnect_callback())
+                return
+
+            except websockets.exceptions.ConnectionClosedOK:
+                # this probably means that user logged out
+                _logger.warning('connection closed')
                 return
 
             except json.JSONDecodeError:
