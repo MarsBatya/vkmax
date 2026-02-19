@@ -4,6 +4,7 @@ from typing import Optional, Union
 
 from vkmax.types.formatting import Element
 from vkmax.functions.uploads import UploadMethods
+from vkmax.utils.formatting import parse_text
 
 # common backward-compatible type
 # for functions accepting a message id
@@ -20,11 +21,16 @@ class MessageMethods(UploadMethods):
         reply_to: Optional[MessageId] = None,
         elements: list[Element] | None = None,
         attaches: list | None = None,
+        formatting: bool = False,
     ):
         """Sends message to specified chat"""
 
         if attaches is None:
             attaches = []
+        
+        if formatting:
+            text, elements = parse_text(text)
+
         payload = {
             "chatId": chat_id,
             "message": {
@@ -58,11 +64,15 @@ class MessageMethods(UploadMethods):
         text: str,
         attaches: list | None = None,
         elements: list[Element] | None = None,
+        formatting: bool = False,
     ):
         """Edits the specified message"""
 
         if attaches is None:
             attaches = []
+
+        if formatting:
+            text, elements = parse_text(text)
 
         return await self.invoke_method(
             opcode=67,
@@ -119,6 +129,7 @@ class MessageMethods(UploadMethods):
         reply_to_message_id: MessageId,
         notify: bool = True,
         elements: list[Element] | None = None,
+        formatting: bool = False,
     ):
         """Replies to message in the chat"""
 
@@ -128,6 +139,7 @@ class MessageMethods(UploadMethods):
             reply_to=reply_to_message_id,
             notify=notify,
             elements=elements,
+            formatting=formatting,
         )
 
 
@@ -138,6 +150,7 @@ class MessageMethods(UploadMethods):
         caption: str,
         notify: bool = True,
         elements: list[Element] | None = None,
+        formatting: bool = False,
     ):
         """Sends photo to specified chat"""
 
@@ -150,6 +163,7 @@ class MessageMethods(UploadMethods):
             notify=notify,
             attaches=[photo],
             elements=elements,
+            formatting=formatting,
         )
 
 
@@ -160,6 +174,7 @@ class MessageMethods(UploadMethods):
         caption: str,
         notify: bool = True,
         elements: list[Element] | None = None,
+        formatting: bool = False,
     ):
         """Sends a file to the specified chat"""
 
@@ -178,4 +193,5 @@ class MessageMethods(UploadMethods):
             notify=notify,
             attaches=[file],
             elements=elements,
+            formatting=formatting,
         )
