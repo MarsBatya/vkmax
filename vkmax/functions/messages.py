@@ -4,7 +4,7 @@ from typing import Optional, Union
 
 from vkmax.client import MaxClient
 from vkmax.functions.uploads import upload_photo, upload_file
-
+from vkmax.types.formatting import Element
 
 # common backward-compatible type
 # for functions accepting a message id
@@ -17,7 +17,8 @@ async def send_message(
     text: str,
     notify: bool = True,
     reply_to: Optional[MessageId] = None,
-    attaches: list = []
+    elements: list[Element] | None = None,
+    attaches: list = [],
 ):
     """Sends message to specified chat"""
 
@@ -26,17 +27,17 @@ async def send_message(
         "message": {
             "text": text,
             "cid": randint(1750000000000, 2000000000000),
-            "elements": [],
+            "elements": elements or [],
             "link": None,
-            "attaches": attaches
+            "attaches": attaches,
         },
-        "notify": notify
+        "notify": notify,
     }
 
     if reply_to is not None:
         payload["message"]["link"] = {
             "type": "REPLY",
-            "messageId": f"{reply_to}"
+            "messageId": f"{reply_to}",
         }
     else:
         del payload["message"]["link"]
@@ -52,7 +53,8 @@ async def edit_message(
     chat_id: int,
     message_id: MessageId,
     text: str,
-    attaches: list = []
+    attaches: list = [],
+    elements: list[Element] | None = None,
 ):
     """Edits the specified message"""
 
@@ -62,9 +64,9 @@ async def edit_message(
             "chatId": chat_id,
             "messageId": f"{message_id}",
             "text": text,
-            "elements": [],
-            "attachments": attaches
-        }
+            "elements": elements or [],
+            "attachments": attaches,
+        },
     )
 
 
@@ -72,7 +74,7 @@ async def delete_message(
     client: MaxClient,
     chat_id: int,
     message_ids: list,
-    delete_for_me: bool = False
+    delete_for_me: bool = False,
 ):
     """Deletes the specified message"""
 
@@ -81,8 +83,8 @@ async def delete_message(
         payload={
             "chatId": chat_id,
             "messageIds": message_ids,
-            "forMe": delete_for_me
-        }
+            "forMe": delete_for_me,
+        },
     )
 
 
@@ -90,7 +92,7 @@ async def pin_message(
     client: MaxClient,
     chat_id: int,
     message_id: MessageId,
-    notify: bool = False
+    notify: bool = False,
 ):
     """Pins message in the chat"""
 
@@ -99,8 +101,8 @@ async def pin_message(
         payload={
             "chatId": chat_id,
             "notifyPin": notify,
-            "messageId": f"{message_id}"
-        }
+            "messageId": f"{message_id}",
+        },
     )
 
 
@@ -109,57 +111,67 @@ async def reply_message(
     chat_id: int,
     text: str,
     reply_to_message_id: MessageId,
-    notify: bool = True
+    notify: bool = True,
+    elements: list[Element] | None = None,
 ):
     """Replies to message in the chat"""
-    
+
     return await send_message(
-        client, chat_id, text,
+        client,
+        chat_id,
+        text,
         reply_to=reply_to_message_id,
         notify=notify,
+        elements=elements,
     )
 
 
 async def send_photo(
-        client: MaxClient,
-        chat_id: int,
-        image_path: str,
-        caption: str,
-        notify: bool = True
-    ):
-
+    client: MaxClient,
+    chat_id: int,
+    image_path: str,
+    caption: str,
+    notify: bool = True,
+    elements: list[Element] | None = None,
+):
     """Sends photo to specified chat"""
 
-    with open(image_path, 'rb') as stream:
+    with open(image_path, "rb") as stream:
         photo = await upload_photo(client, chat_id, stream)
 
     return await send_message(
-        client, chat_id, caption,
+        client,
+        chat_id,
+        caption,
         notify=notify,
         attaches=[photo],
+        elements=elements,
     )
 
 
 async def send_file(
-        client: MaxClient,
-        chat_id: int,
-        file_path: str,
-        caption: str,
-        notify: bool = True
-    ):
-
+    client: MaxClient,
+    chat_id: int,
+    file_path: str,
+    caption: str,
+    notify: bool = True,
+    elements: list[Element] | None = None,
+):
     """Sends a file to the specified chat"""
 
     file_path: Path = Path(file_path)
 
-    with file_path.open('rb') as stream:
+    with file_path.open("rb") as stream:
         file = await upload_file(
             client, chat_id, stream,
             filename=file_path.name,
         )
 
     return await send_message(
-        client, chat_id, caption,
+        client,
+        chat_id,
+        caption,
         notify=notify,
         attaches=[file],
+        elements=elements,
     )
