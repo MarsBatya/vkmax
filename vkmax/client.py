@@ -14,7 +14,7 @@ from functools import wraps
 WS_HOST = "wss://ws-api.oneme.ru/websocket"
 RPC_VERSION = 11
 APP_VERSION = "26.2.2"
-USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"  # noqa: E501
 
 _logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def ensure_connected(method: Coro) -> Coro:
             raise RuntimeError("WebSocket not connected. Call .connect() first.")
         return method(self, *args, **kwargs)
 
-    return wrapper # type: ignore
+    return wrapper  # type: ignore
 
 
 class UserAgentDict(TypedDict):
@@ -41,17 +41,21 @@ class UserAgentDict(TypedDict):
     screen: str
     timezone: str
 
-DEFAULT_USER_AGENT_DICT = UserAgentDict({
-    "deviceType": "WEB",
-    "locale": "ru",
-    "deviceLocale": "ru",
-    "osVersion": "Linux",
-    "deviceName": "Chrome",
-    "headerUserAgent": USER_AGENT,
-    "appVersion": APP_VERSION,
-    "screen": "1080x1920 1.0x",
-    "timezone": "Europe/Moscow",
-})
+
+DEFAULT_USER_AGENT_DICT = UserAgentDict(
+    {
+        "deviceType": "WEB",
+        "locale": "ru",
+        "deviceLocale": "ru",
+        "osVersion": "Linux",
+        "deviceName": "Chrome",
+        "headerUserAgent": USER_AGENT,
+        "appVersion": APP_VERSION,
+        "screen": "1080x1920 1.0x",
+        "timezone": "Europe/Moscow",
+    },
+)
+
 
 class MaxClient:
     def __init__(self, user_agent_dict: UserAgentDict = DEFAULT_USER_AGENT_DICT):
@@ -75,29 +79,42 @@ class MaxClient:
         if self._connection:
             raise Exception("Already connected")
 
-        _logger.info(f'Connecting to {WS_HOST}...')
+        _logger.info(f"Connecting to {WS_HOST}...")
         self._connection = await websockets.connect(
             WS_HOST,
-            origin=websockets.Origin('https://web.max.ru'),
-            user_agent_header=USER_AGENT
+            origin=websockets.Origin("https://web.max.ru"),
+            user_agent_header=USER_AGENT,
         )
 
         self._recv_task = asyncio.create_task(self._recv_loop())
-        _logger.info('Connected. Receive task started.')
+        _logger.info("Connected. Receive task started.")
+        return self._connection
+
+    @property
+    def connection(self) -> ClientConnection:
+        """
+        Returns the active session or raises — use inside @ensure_connected methods.
+        """
+        if self._connection is None:
+            raise RuntimeError("WebSocket not connected. Call .connect() first.")
         return self._connection
 
     @ensure_connected
     async def disconnect(self):
         await self._stop_keepalive_task()
-        self._recv_task.cancel()
-        await self._connection.close()
+        if self._recv_task:
+            self._recv_task.cancel()
+        if self._connection:
+            await self._connection.close()
         self._connection = None
         if self._http_pool:
             await self._http_pool.close()
             self._http_pool = None
 
     @ensure_connected
-    async def invoke_method(self, opcode: int, payload: dict[str, Any], retries: int = 2):
+    async def invoke_method(
+        self, opcode: int, payload: dict[str, Any], retries: int = 2,
+    ):
         seq = next(self._seq)
 
         request = {
@@ -105,73 +122,77 @@ class MaxClient:
             "cmd": 0,
             "seq": seq,
             "opcode": opcode,
-            "payload": payload
+            "payload": payload,
         }
-        _logger.info(f'-> REQUEST: {request}')
+        _logger.info(f"-> REQUEST: {request}")
 
         future = asyncio.get_event_loop().create_future()
         self._pending[seq] = future
 
         try:
-            await self._connection.send(
-                json.dumps(request)
-            )
+            await self.connection.send(json.dumps(request))
         except websockets.exceptions.ConnectionClosed:
-            _logger.warning('got ws disconnect in invoke_method')
+            _logger.warning("got ws disconnect in invoke_method")
             if self._reconnect_callback:
-                _logger.info('reconnecting')
+                _logger.info("reconnecting")
                 await self._reconnect_callback()
                 if retries > 0:
-                    _logger.info('retrying invoke_method after reconnect')
+                    _logger.info("retrying invoke_method after reconnect")
                     await self.invoke_method(opcode, payload, retries - 1)
-            return
+            return None
 
         response = await future
-        _logger.info(f'<- RESPONSE: {response}')
+        _logger.info(f"<- RESPONSE: {response}")
 
         return response
 
     async def set_callback(self, function):
         import warnings
-        warnings.warn('switch to set_packet_callback', category=DeprecationWarning)
+
+        warnings.warn(
+            "switch to set_packet_callback",
+            stacklevel=2,
+            category=DeprecationWarning,
+        )
         self.set_packet_callback(function)
 
     def set_packet_callback(self, function):
         if not asyncio.iscoroutinefunction(function):
-            raise TypeError('callback must be async')
+            raise TypeError("callback must be async")
         self._incoming_event_callback = function
 
     def set_reconnect_callback(self, function):
         if not asyncio.iscoroutinefunction(function):
-            raise TypeError('callback must be async')
+            raise TypeError("callback must be async")
         self._reconnect_callback = function
 
-    async def _recv_loop(self):
+    @ensure_connected
+    async def _recv_loop(self):  # noqa: C901
         while True:
             try:
-                packet = await self._connection.recv()
+                packet = await self.connection.recv()
                 packet = json.loads(packet)
 
             except asyncio.CancelledError:
-                _logger.info('receiver cancelled')
+                _logger.info("receiver cancelled")
                 return
 
             except websockets.exceptions.ConnectionClosedError as err:
-                _logger.warning('got ws disconnect in receiver')
+                _logger.warning("got ws disconnect in receiver")
                 if not self._is_logged_in:
                     raise err
                 if self._reconnect_callback:
-                    _logger.info('reconnecting')
+                    _logger.info("reconnecting")
                     asyncio.create_task(self._reconnect_callback())
                 return
 
             except websockets.exceptions.ConnectionClosedOK:
                 # this probably means that user logged out
-                _logger.warning('connection closed')
+                _logger.warning("connection closed")
                 return
 
             except json.JSONDecodeError:
-                _logger.warning('could not decode packet')
+                _logger.warning("could not decode packet")
                 continue
 
             seq = packet["seq"]
@@ -191,7 +212,7 @@ class MaxClient:
 
                 if future:
                     future.set_result(None)
-            
+
             if self._incoming_event_callback:
                 asyncio.create_task(self._incoming_event_callback(self, packet))
 
@@ -199,33 +220,30 @@ class MaxClient:
 
     @ensure_connected
     async def _send_keepalive_packet(self):
-        await self.invoke_method(
-            opcode=1,
-            payload={"interactive": False}
-        )
+        await self.invoke_method(opcode=1, payload={"interactive": False})
 
     @ensure_connected
     async def _keepalive_loop(self):
-        _logger.info(f'keepalive task started')
+        _logger.info("keepalive task started")
         try:
             while True:
                 await self._send_keepalive_packet()
                 await asyncio.sleep(30)
         except asyncio.CancelledError:
-            _logger.info('keepalive task stopped')
+            _logger.info("keepalive task stopped")
             return
 
     @ensure_connected
     async def _start_keepalive_task(self):
         if self._keepalive_task:
-            raise Exception('Keepalive task already started')
+            raise Exception("Keepalive task already started")
 
         self._keepalive_task = asyncio.create_task(self._keepalive_loop())
         return
 
     async def _stop_keepalive_task(self):
         if not self._keepalive_task:
-            raise Exception('Keepalive task is not running')
+            raise Exception("Keepalive task is not running")
 
         self._keepalive_task.cancel()
         self._keepalive_task = None
@@ -235,13 +253,13 @@ class MaxClient:
 
     @ensure_connected
     async def _send_hello_packet(self, device_id: Optional[str] = None):
-        self._device_id = device_id or f'{uuid.uuid4()}'
+        self._device_id = device_id or f"{uuid.uuid4()}"
         return await self.invoke_method(
             opcode=6,
             payload={
                 "userAgent": self.user_agent,
                 "deviceId": self._device_id,
-            }
+            },
         )
 
     @ensure_connected
@@ -249,13 +267,11 @@ class MaxClient:
         """:returns: Login token."""
         await self._send_hello_packet()
         start_auth_response = await self.invoke_method(
-            opcode=17,
-            payload={
-                "phone": phone,
-                "type": "START_AUTH",
-                "language": "ru"
-            }
+            opcode=17, payload={"phone": phone, "type": "START_AUTH", "language": "ru"},
         )
+        if not start_auth_response:
+            raise Exception("Failed to start auth")
+
         return start_auth_response["payload"]["token"]
 
     @ensure_connected
@@ -269,19 +285,22 @@ class MaxClient:
             payload={
                 "token": sms_token,
                 "verifyCode": str(sms_code),
-                "authTokenType": "CHECK_CODE"
-            }
+                "authTokenType": "CHECK_CODE",
+            },
         )
+
+        if not verification_response:
+            raise Exception("Failed to verify code")
 
         if "error" in verification_response["payload"]:
             raise Exception(verification_response["payload"]["error"])
 
         try:
             phone = verification_response["payload"]["profile"]["contact"]["phone"]
-        except:
-            phone = '[?]'
-            _logger.warning('Got no phone number in server response')
-        _logger.info(f'Successfully logged in as {phone}')
+        except Exception:
+            phone = "[?]"
+            _logger.warning("Got no phone number in server response")
+        _logger.info(f"Successfully logged in as {phone}")
 
         self._is_logged_in = True
         await self._start_keepalive_task()
@@ -303,18 +322,21 @@ class MaxClient:
                 "draftsSync": 0,
                 "chatsCount": 40,
                 "userAgent": self.user_agent,
-            }
+            },
         )
+
+        if not login_response:
+            raise Exception("Failed to login")
 
         if "error" in login_response["payload"]:
             raise Exception(login_response["payload"]["error"])
 
         try:
             phone = login_response["payload"]["profile"]["contact"]["phone"]
-        except:
-            phone = '[?]'
-            _logger.warning('Got no phone number in server response')
-        _logger.info(f'Successfully logged in as {phone}')
+        except Exception:
+            phone = "[?]"
+            _logger.warning("Got no phone number in server response")
+        _logger.info(f"Successfully logged in as {phone}")
 
         self._is_logged_in = True
         await self._start_keepalive_task()
