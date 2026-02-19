@@ -18,15 +18,17 @@ async def send_message(
     notify: bool = True,
     reply_to: Optional[MessageId] = None,
     elements: list[Element] | None = None,
-    attaches: list = [],
+    attaches: list | None = None,
 ):
     """Sends message to specified chat"""
 
+    if attaches is None:
+        attaches = []
     payload = {
         "chatId": chat_id,
         "message": {
             "text": text,
-            "cid": randint(1750000000000, 2000000000000),
+            "cid": randint(1750000000000, 2000000000000),  # noqa: S311
             "elements": elements or [],
             "link": None,
             "attaches": attaches,
@@ -53,10 +55,13 @@ async def edit_message(
     chat_id: int,
     message_id: MessageId,
     text: str,
-    attaches: list = [],
+    attaches: list | None = None,
     elements: list[Element] | None = None,
 ):
     """Edits the specified message"""
+
+    if attaches is None:
+        attaches = []
 
     return await client.invoke_method(
         opcode=67,
@@ -159,12 +164,14 @@ async def send_file(
 ):
     """Sends a file to the specified chat"""
 
-    file_path: Path = Path(file_path)
+    path: Path = Path(file_path)
 
-    with file_path.open("rb") as stream:
+    with path.open("rb") as stream:
         file = await upload_file(
-            client, chat_id, stream,
-            filename=file_path.name,
+            client,
+            chat_id,
+            stream,
+            filename=path.name,
         )
 
     return await send_message(
