@@ -1,98 +1,91 @@
-from vkmax.client import MaxClient
 from typing import Optional
 
 
-async def change_online_status_visibility(
-    client: MaxClient,
-    hidden: bool
-):
-    """Hide or show you last online status"""
-
-    return await client.invoke_method(
-        opcode=22,
-        payload={
-            "settings": {
-                "user": {
-                    "HIDDEN": hidden
-                }
-            }
-        }
-    )
+from vkmax.raw_client import MaxClient as RawClient
 
 
-async def set_is_findable_by_phone(
-    client: MaxClient,
-    findable: bool
-):
-    """You can make your profile findable by phone or not"""
-    
-    findable = "ALL" if findable else "CONTACTS"
+class ProfileMethods(RawClient):
+    async def change_online_status_visibility(
+        self,
+        hidden: bool,
+    ):
+        """Hide or show you last online status"""
 
-    return await client.invoke_method(
-        opcode=22,
-        payload={
-            "settings": {
-                "user": {
-                    "SEARCH_BY_PHONE": findable
-                }
-            }
-        }
-    )
+        return await self.invoke_method(
+            opcode=22,
+            payload={
+                "settings": {
+                    "user": {
+                        "HIDDEN": hidden,
+                    },
+                },
+            },
+        )
 
-async def set_calls_privacy(
-    client: MaxClient,
-    can_be_called: bool
-):
-    """You can enable or disable calls for everyone"""
+    async def set_is_findable_by_phone(
+        self,
+        findable: bool,
+    ):
+        """You can make your profile findable by phone or not"""
 
-    can_be_called = "ALL" if can_be_called else "CONTACTS"
+        return await self.invoke_method(
+            opcode=22,
+            payload={
+                "settings": {
+                    "user": {
+                        "SEARCH_BY_PHONE": "ALL" if findable else "CONTACTS",
+                    },
+                },
+            },
+        )
 
-    return await client.invoke_method(
-        opcode = 22,
-        payload = {
-            "settings": {
-                "user": {
-                    "INCOMING_CALL": can_be_called
-                }
-            }
-        }
-    )
+    async def set_calls_privacy(
+        self,
+        can_be_called: bool,
+    ):
+        """You can enable or disable calls for everyone"""
 
+        return await self.invoke_method(
+            opcode=22,
+            payload={
+                "settings": {
+                    "user": {
+                        "INCOMING_CALL": "ALL" if can_be_called else "CONTACTS",
+                    },
+                },
+            },
+        )
 
-async def invite_privacy(
-    client: MaxClient,
-    invitable:  bool
-):
+    async def invite_privacy(
+        self,
+        invitable: bool,
+    ):
+        """Changes the possibility of inviting you to other chats"""
 
-    """Changes the possibility of inviting you to other chats"""
+        return await self.invoke_method(
+            opcode=22,
+            payload={
+                "settings": {
+                    "user": {
+                        "CHATS_INVITE": "ALL" if invitable else "CONTACTS",
+                    },
+                },
+            },
+        )
 
-    invitable = "ALL" if invitable else "CONTACTS"
+    async def change_profile(
+        self,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        bio: Optional[str] = None,
+    ):
+        """Changes your public profile"""
 
-    return await client.invoke_method(
-        opcode=22,
-        payload={
-            "settings": {
-                "user": {
-                    "CHATS_INVITE": invitable
-                }
-            }
-        }
-    )
-
-
-async def change_profile(
-    client: MaxClient,
-    first_name: Optional[str] = None,
-    last_name: Optional[str] = None,
-    bio: Optional[str] = None
-):
-    """Changes your public profile"""
-
-    return await client.invoke_method(
-        opcode=16,
-        payload={
-            "firstName": first_name,
-            "lastName": last_name,
-            "description": bio
-        }
-    )
+        return await self.invoke_method(
+            opcode=16,
+            payload={
+                "firstName": first_name,
+                "lastName": last_name,
+                "description": bio,
+            },
+        )

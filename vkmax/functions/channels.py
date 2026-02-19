@@ -1,89 +1,55 @@
-from vkmax.client import MaxClient
 from random import randint
 
-
-async def resolve_channel_username(
-    client: MaxClient, 
-    username: str
-):
-    """Resolving channel by username"""
-
-    return await client.invoke_method(
-        opcode=89,
-        payload={
-            "link": f"https://max.ru/{username}"
-        }
-    )
+from vkmax.raw_client import MaxClient as RawClient
 
 
-async def resolve_channel_id(
-    client: MaxClient,
-    channel_id: int
-):
-    """Resolve channel by id"""
+class ChannelMethods(RawClient):
+    async def resolve_channel_username(self, username: str):
+        """Resolving channel by username"""
 
-    return await client.invoke_method(
-        opcode=48,
-        payload={
-            "chatIds": [channel_id]
-        }
-    )
+        return await self.invoke_method(
+            opcode=89, payload={"link": f"https://max.ru/{username}"},
+        )
 
+    async def resolve_channel_id(self, channel_id: int):
+        """Resolve channel by id"""
 
-async def join_channel(
-    client: MaxClient,
-    username: str
-):
-    """Joining a channel and resolving"""
+        return await self.invoke_method(opcode=48, payload={"chatIds": [channel_id]})
 
-    return await client.invoke_method(
-        opcode=57,
-        payload={
-            "link": f"https://max.ru/{username}"
-        }
-    )
+    async def join_channel(self, username: str):
+        """Joining a channel and resolving"""
 
+        return await self.invoke_method(
+            opcode=57, payload={"link": f"https://max.ru/{username}"},
+        )
 
-async def create_channel(
-        client: MaxClient,
-        channel_name: str
-    ):
-    return await client.invoke_method(
-        opcode=64,
-        payload={
-            "message": {
-                "cid": randint(1750000000000, 2000000000000),
-                "attaches":
-                    [
+    async def create_channel(self, channel_name: str):
+        return await self.invoke_method(
+            opcode=64,
+            payload={
+                "message": {
+                    "cid": randint(1750000000000, 2000000000000),  # noqa: S311
+                    "attaches": [
                         {
                             "_type": "CONTROL",
                             "event": "new",
                             "title": channel_name,
-                            "chatType": "CHANNEL"
-                        }
+                            "chatType": "CHANNEL",
+                        },
                     ],
-                "text": ""
-            }
-        }
-    )
+                    "text": "",
+                },
+            },
+        )
 
+    async def mute_channel(self, channel_id: int, mute: bool = True):
+        """Mutes or unmutes a channel"""
 
-async def mute_channel(
-        client: MaxClient,
-        channel_id: int,
-        mute: bool = True
-    ):
-    """Mutes or unmutes a channel"""
-
-    return await client.invoke_method(
-        opcode=22,
-        payload={
-            "settings": {
-                "chats": {
-                    str(channel_id): {
-                        "dontDisturbUntil": -1 if mute else 0
-                    }
-                }
-            }
-        }
-    )
+        return await self.invoke_method(
+            opcode=22,
+            payload={
+                "settings": {
+                    "chats": {str(channel_id): {"dontDisturbUntil": -1 if mute else 0}},
+                },
+            },
+        )
