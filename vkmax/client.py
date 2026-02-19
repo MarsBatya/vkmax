@@ -3,7 +3,7 @@ import itertools
 import json
 import logging
 import uuid
-from typing import Any, Callable, Optional, TypedDict
+from typing import Any, Awaitable, Callable, Optional, TypeVar, TypedDict
 
 import aiohttp
 import websockets
@@ -18,15 +18,16 @@ USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Ge
 
 _logger = logging.getLogger(__name__)
 
+Coro = TypeVar("Coro", bound=Callable[..., Awaitable])
 
-def ensure_connected(method: Callable):
+def ensure_connected(method: Coro) -> Coro:
     @wraps(method)
     def wrapper(self, *args, **kwargs):
         if self._connection is None:
             raise RuntimeError("WebSocket not connected. Call .connect() first.")
         return method(self, *args, **kwargs)
 
-    return wrapper
+    return wrapper # type: ignore
 
 
 class UserAgentDict(TypedDict):
