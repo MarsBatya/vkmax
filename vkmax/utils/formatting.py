@@ -1,4 +1,3 @@
-
 """
 HTML parser/unparser for converting between formatted HTML text and
 (clean_text, elements) pairs suitable for messaging/rich-text APIs.
@@ -36,6 +35,13 @@ _TAG_TO_TYPE: dict[str, str] = {
     "strike": "STRIKETHROUGH",
     "del": "STRIKETHROUGH",
     "blockquote": "QUOTE",
+    "emoji": "ANIMOJI",
+    "animoji": "ANIMOJI",
+    "h1": "HEADING",
+    "h2": "HEADING",
+    "h3": "HEADING",
+    "code": "MONOSPACED",
+    "pre": "MONOSPACED",
 }
 
 # Maps element type → preferred HTML tag for unparsing
@@ -46,6 +52,10 @@ _TYPE_TO_TAG: dict[str, str] = {
     "UNDERLINE": "u",
     "STRIKETHROUGH": "s",
     "QUOTE": "blockquote",
+    "ANIMOJI": "emoji",
+    "HEADING": "h1",
+    "MONOSPACED": "code",
+    "USER_MENTION": "a",
 }
 
 
@@ -82,7 +92,7 @@ class _HTMLParser(HTMLParser):
     # HTMLParser callbacks
     # ------------------------------------------------------------------
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:  # noqa: C901
         element_type = _TAG_TO_TYPE.get(tag)
         if element_type is None:
             return
@@ -92,8 +102,22 @@ class _HTMLParser(HTMLParser):
         if tag == "a":
             for attr_name, attr_value in attrs:
                 if attr_name == "href" and attr_value is not None:
-                    frame["attributes"] = {"url": attr_value}
+                    if attr_value.startswith("max://user/"):
+                        # '<a href="max://user/user_id">Имя Фамилия</a>'
+                        frame["_cast_type"] = "USER_MENTION"
+                        frame["entityId"] = int(attr_value.removeprefix("max://user/"))
+                    else:
+                        frame["attributes"] = {"url": attr_value}
                     break
+
+        if tag in ("emoji", "animoji"):
+            # <emoji id=65>💀</emoji> or <animoji id=65>💀</animoji>
+            attributes = {}
+            for attr_name, attr_value in attrs:
+                if attr_name == "id" and attr_value is not None:
+                    frame["entityId"] = int(attr_value)
+
+            frame["attributes"] = attributes
 
         self._stack.append(frame)
 
@@ -108,6 +132,8 @@ class _HTMLParser(HTMLParser):
             if self._stack[i]["type"] == element_type:
                 frame = self._stack.pop(i)
                 frame["length"] = self._utf16_pos - frame.get("from", 0)
+                if cast_type := frame.pop("_cast_type", None):
+                    frame["type"] = cast_type
                 self.elements.append(frame)  # type: ignore[arg-type]
                 break
 
@@ -149,7 +175,7 @@ def unparse_text(clean_text: str, elements: list[Element]) -> str:
     the resulting HTML is as well-formed as possible.
     """
     if not elements:
-        return escape(clean_text)
+        return escape(clean_text or "")
 
     # Build a flat event list: (utf16_pos, sort_key, html_fragment).
     #
@@ -167,12 +193,22 @@ def unparse_text(clean_text: str, elements: list[Element]) -> str:
         end = start + elem["length"]
         length = elem["length"]
 
+        close_frag = f"</{tag}>"
         if elem["type"] == "LINK":
             url = escape(elem.get("attributes", {}).get("url", ""), quote=True)
             open_frag = f'<a href="{url}">'
+        elif elem["type"] == "ANIMOJI":
+            entity_id = elem.get("entityId", 0)
+            open_frag = f"<emoji id={entity_id}>"
+        elif elem["type"] == "USER_MENTION":
+            if elem.get("entityName") or not elem.get("entityId"):
+                # no need to send bot mentions (@username)
+                open_frag = ""
+                close_frag = ""
+            else:
+                open_frag = f'<a href="max://user/{elem.get("entityId", 0)}">'
         else:
             open_frag = f"<{tag}>"
-        close_frag = f"</{tag}>"
 
         events.append((start, 1, -length, open_frag))  # open:  wider spans first
         events.append((end, 0, length, close_frag))  # close: shorter spans first
@@ -218,6 +254,10 @@ def main() -> None:
         "<u>Подчеркнутый💪💪 тут</u>\n\n"
         "<s>Зачеркнутый тут</s>\n"
         "<blockquote>Цита🦁та тут</blockquote>\n"
+        "<emoji id=65>💀</emoji>\n"
+        "<h1>Заголовок</h1>\n"
+        "<code>Моноширинный текст</code>\n\n"
+        "<a href='max://user/123456'>username</a>\n\n"
         "test"
     )
 

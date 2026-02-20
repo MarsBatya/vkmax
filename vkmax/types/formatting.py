@@ -2,7 +2,9 @@
 from typing import Literal, NotRequired, TypedDict
 
 class Attributes(TypedDict):
-    url: str
+    url: NotRequired[str] # for link
+    animojiSetId: NotRequired[str]
+    animojiLottieUrl: NotRequired[str]
 
 
 Element = TypedDict(
@@ -15,9 +17,15 @@ Element = TypedDict(
             "UNDERLINE",
             "STRIKETHROUGH",
             "QUOTE",
+            "ANIMOJI",
+            "HEADING",
+            "MONOSPACED",
+            "USER_MENTION",
         ],
         "from": NotRequired[int],
         "length": int,
         "attributes": NotRequired[Attributes],
+        "entityId": NotRequired[int],
+        "entityName": NotRequired[str],
     },
 )
