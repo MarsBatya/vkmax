@@ -36,6 +36,8 @@ class AttachmentType(str, Enum):
     VIDEO = "VIDEO"
     FILE = "FILE"
     INLINE_KEYBOARD = "INLINE_KEYBOARD"
+    CONTROL = "CONTROL"
+    SHARE = "SHARE"
 
 
 class ButtonType(str, Enum):
@@ -52,6 +54,7 @@ class PreviewType(str, Enum):
 
 class MessageStatus(str, Enum):
     EDITED = "EDITED"
+    REMOVED = "REMOVED"
 
 
 class ChatAccess(str, Enum):

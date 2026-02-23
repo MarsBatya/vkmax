@@ -3,15 +3,24 @@ from typing import Any, Optional
 
 from adaptix import Retort, NameStyle, name_mapping
 
-from vkmax.types.messages import Message, Link, DelayedAttributes
-from vkmax.types.attaches import Attachment, Button, Preview
+from vkmax.types.messages import (
+    Message,
+    Link,
+    DelayedAttributes,
+    ReactionInfo,
+    Attachment,
+    Button,
+    Preview,
+    SimpleImage,
+)
 from vkmax.types.elements import MessageElement, AnimojiAttributes
+from vkmax.types.chats import Chat, ChatReactions
 
 
 @dataclass(slots=True)
 class Payload:
-    chat_id: int
     message: Message
+    chat_id: Optional[int] = None
     unread: Optional[int] = None
     mark: Optional[int] = None
     ttl: Optional[bool] = None
@@ -22,6 +31,23 @@ class Payload:
     update_type_id: Optional[int] = None
     user_id: Optional[int] = None
 
+    # for pinned msgs looks like
+    chat: Optional[Chat] = None
+
+@dataclass(slots=True)
+class DeletedPayload:
+    chat_id: int
+    message_ids: list[str]
+
+@dataclass(slots=True)
+class ChatPayload:
+    chat: Chat
+    message: Optional[Message] = None
+    chat_id: Optional[int] = None
+    mark: Optional[int] = None
+    prev_message_id: Optional[str] = None
+    ttl: Optional[bool] = None
+    unread: Optional[int] = None
 
 # ---------------- Packet ----------------
 
@@ -32,7 +58,7 @@ class Packet:
     cmd: int
     seq: int
     opcode: int
-    payload: Payload
+    payload: Payload|DeletedPayload|ChatPayload
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -52,17 +78,23 @@ _retort = Retort(
             Packet,
             name_style=NameStyle.CAMEL,
         ),
-        name_mapping(
-            Payload,
-            name_style=NameStyle.CAMEL,
-            omit_default=True,
-        ),
-        name_mapping(
-            DelayedAttributes,
-            name_style=NameStyle.CAMEL,
-            omit_default=True,
-        ),
         *(
+            name_mapping(
+                _type,
+                name_style=NameStyle.CAMEL,
+                omit_default=True,
+            )
+            for _type in (
+                Payload,
+                DeletedPayload,
+                ChatPayload,
+                DelayedAttributes,
+                Chat,
+                ChatReactions,
+                ReactionInfo,
+            )
+        ),
+        * (
             name_mapping(
                 _type,
                 name_style=NameStyle.CAMEL,
@@ -77,7 +109,7 @@ _retort = Retort(
                 map={"_type": "_type"},
                 omit_default=True,
             )
-            for _type in Attachment.__args__
+            for _type in (*Attachment.__args__, SimpleImage)
         ),
         name_mapping(
             Link,
