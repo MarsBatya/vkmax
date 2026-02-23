@@ -5,6 +5,7 @@ from typing import Optional, Union
 from vkmax.types.formatting import Element
 from vkmax.functions.uploads import UploadMethods
 from vkmax.utils.formatting import parse_text
+from vkmax.types.packets import Packet
 
 # common backward-compatible type
 # for functions accepting a message id
@@ -51,10 +52,14 @@ class MessageMethods(UploadMethods):
         else:
             del payload["message"]["link"]
 
-        return await self.invoke_method(
+        result = await self.invoke_method(
             opcode=64,
             payload=payload,
         )
+        if not result:
+            raise ValueError("Failed to retrieve send message info")
+        
+        return Packet.from_dict(result).payload
 
 
     async def edit_message(
@@ -74,7 +79,7 @@ class MessageMethods(UploadMethods):
         if formatting:
             text, elements = parse_text(text)
 
-        return await self.invoke_method(
+        result = await self.invoke_method(
             opcode=67,
             payload={
                 "chatId": chat_id,
@@ -85,6 +90,12 @@ class MessageMethods(UploadMethods):
             },
         )
 
+        if not result:
+            raise ValueError("Failed to retrieve edit message info")
+        if not result.get("payload", {}).get("chatId"):
+            result["payload"]["chatId"] = chat_id
+        return Packet.from_dict(result).payload
+
 
     async def delete_message(
         self,
@@ -94,7 +105,7 @@ class MessageMethods(UploadMethods):
     ):
         """Deletes the specified message"""
 
-        return await self.invoke_method(
+        result = await self.invoke_method(
             opcode=66,
             payload={
                 "chatId": chat_id,
@@ -102,6 +113,9 @@ class MessageMethods(UploadMethods):
                 "forMe": delete_for_me,
             },
         )
+        if not result:
+            raise ValueError("Failed to retrieve delete message info")
+        return Packet.from_dict(result).payload
 
 
     async def pin_message(
@@ -112,14 +126,18 @@ class MessageMethods(UploadMethods):
     ):
         """Pins message in the chat"""
 
-        return await self.invoke_method(
+        result = await self.invoke_method(
             opcode=55,
             payload={
                 "chatId": chat_id,
                 "notifyPin": notify,
-                "messageId": f"{message_id}",
+                "pinMessageId": f"{message_id}",
             },
         )
+
+        if not result:
+            raise ValueError("Failed to retrieve pin message info")
+        return Packet.from_dict(result).payload
 
 
     async def reply_message(
