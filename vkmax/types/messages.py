@@ -27,6 +27,12 @@ class Stats:
 
 
 @dataclass(slots=True)
+class DelayedAttributes:
+    notify_opponents: bool
+    notify_sender: bool
+    time_to_fire: int
+
+@dataclass(slots=True)
 class UserMessage:
     sender: int
     message_id: str
@@ -41,6 +47,7 @@ class UserMessage:
     cid: Optional[int] = None
     elements: Optional[list[MessageElement]] = None
     link: Optional[Link] = None
+    delayed_attributes: Optional[DelayedAttributes] = None
 
 
 @dataclass(slots=True)
@@ -58,6 +65,7 @@ class ChannelMessage:
     cid: Optional[int] = None
     elements: Optional[list[MessageElement]] = None
     link: Optional[Link] = None
+    delayed_attributes: Optional[DelayedAttributes] = None
 
 
 Message = Union[UserMessage, ChannelMessage]

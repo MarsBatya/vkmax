@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 from adaptix import Retort, NameStyle, name_mapping
 
-from vkmax.types.messages import Message, Link
+from vkmax.types.messages import Message, Link, DelayedAttributes
 from vkmax.types.attaches import Attachment, Button, Preview
 from vkmax.types.elements import MessageElement, AnimojiAttributes
 
@@ -11,11 +11,16 @@ from vkmax.types.elements import MessageElement, AnimojiAttributes
 @dataclass(slots=True)
 class Payload:
     chat_id: int
-    unread: int
     message: Message
-    ttl: bool
-    mark: int
+    unread: Optional[int] = None
+    mark: Optional[int] = None
+    ttl: Optional[bool] = None
     prev_message_id: Optional[str] = None  # for personal chats looks like
+
+    # for scheduled msgs
+    last_delayed_update_time: Optional[int] = None
+    update_type_id: Optional[int] = None
+    user_id: Optional[int] = None
 
 
 # ---------------- Packet ----------------
@@ -49,6 +54,11 @@ _retort = Retort(
         ),
         name_mapping(
             Payload,
+            name_style=NameStyle.CAMEL,
+            omit_default=True,
+        ),
+        name_mapping(
+            DelayedAttributes,
             name_style=NameStyle.CAMEL,
             omit_default=True,
         ),
