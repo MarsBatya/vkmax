@@ -1,2 +1,3 @@
 aiohttp
 websockets
+adaptix==3.0.0b11

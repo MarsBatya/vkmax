@@ -17,6 +17,7 @@ keywords = ["vk", "vkapi", "max-messenger", "vkmax", "oneme"]
 dependencies = [
     "aiohttp",
     "websockets",
+    "adaptix==3.0.0b11",
 ]
 requires-python = ">=3.9"
 
