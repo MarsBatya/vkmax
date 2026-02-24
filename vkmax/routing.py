@@ -103,4 +103,5 @@ class Router:
             for handler in self.handlers:
                 if await handler.condition(client, packet):
                     await handler.callback(client, cast(Payload, packet.payload))
-                    break
+                    return True
+        return None
