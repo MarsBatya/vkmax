@@ -60,6 +60,10 @@ DEFAULT_USER_AGENT_DICT = UserAgentDict(
 
 
 class MaxClient:
+
+    phone: int
+    user_id: int
+
     def __init__(self, user_agent_dict: UserAgentDict = DEFAULT_USER_AGENT_DICT):
         self._connection: Optional[ClientConnection] = None
         self._http_pool: Optional[aiohttp.ClientSession] = None
@@ -308,6 +312,8 @@ class MaxClient:
             _logger.warning("Got no phone number in server response")
         _logger.info(f"Successfully logged in as {phone}")
 
+        self.user_id = verification_response["payload"]["profile"]["contact"]["id"]
+        self.phone = verification_response["payload"]["profile"]["contact"]["phone"]
         self._is_logged_in = True
         await self._start_keepalive_task()
 
@@ -344,6 +350,8 @@ class MaxClient:
             _logger.warning("Got no phone number in server response")
         _logger.info(f"Successfully logged in as {phone}")
 
+        self.user_id = login_response["payload"]["profile"]["contact"]["id"]
+        self.phone = login_response["payload"]["profile"]["contact"]["phone"]
         self._is_logged_in = True
         await self._start_keepalive_task()
 
