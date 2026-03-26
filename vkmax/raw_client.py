@@ -1,16 +1,16 @@
-
 import asyncio
 import itertools
 import json
 import logging
+import ssl
 import uuid
-from typing import Any, Awaitable, Callable, Optional, TypeVar, TypedDict
+from functools import wraps
+from typing import Any, Awaitable, Callable, Optional, TypedDict, TypeVar
 
 import aiohttp
 import websockets
+from python_socks.async_.asyncio import Proxy
 from websockets.asyncio.client import ClientConnection
-
-from functools import wraps
 
 WS_HOST = "wss://ws-api.oneme.ru/websocket"
 RPC_VERSION = 11
@@ -60,11 +60,14 @@ DEFAULT_USER_AGENT_DICT = UserAgentDict(
 
 
 class MaxClient:
-
     phone: int
     user_id: int
 
-    def __init__(self, user_agent_dict: UserAgentDict = DEFAULT_USER_AGENT_DICT):
+    def __init__(
+        self,
+        user_agent_dict: UserAgentDict = DEFAULT_USER_AGENT_DICT,
+        proxy_url: Optional[str] = None,
+    ):
         self._connection: Optional[ClientConnection] = None
         self._http_pool: Optional[aiohttp.ClientSession] = None
         self._is_logged_in: bool = False
@@ -78,6 +81,7 @@ class MaxClient:
         self._video_pending = {}
         self._file_pending = {}
         self.user_agent = user_agent_dict
+        self.proxy_url = proxy_url
 
     # --- WebSocket connection management ---
 
@@ -86,10 +90,21 @@ class MaxClient:
             raise Exception("Already connected")
 
         _logger.info(f"Connecting to {WS_HOST}...")
+
+        extra_kwargs = {}
+        if self.proxy_url:
+            proxy = Proxy.from_url(self.proxy_url)
+            sock = await proxy.connect(dest_host="ws-api.oneme.ru", dest_port=443)
+            extra_kwargs = {
+                "sock": sock,
+                # required when passing a raw socket to wss://
+                "ssl": ssl.create_default_context(),
+            }
         self._connection = await websockets.connect(
             WS_HOST,
             origin=websockets.Origin("https://web.max.ru"),
             user_agent_header=USER_AGENT,
+            **extra_kwargs,
         )
 
         self._recv_task = asyncio.create_task(self._recv_loop())
