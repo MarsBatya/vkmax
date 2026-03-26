@@ -1,5 +1,10 @@
 
-from typing import Literal, NotRequired, TypedDict
+from typing import Literal, TypedDict
+
+try:
+    from typing import NotRequired
+except ImportError:
+    from typing_extensions import NotRequired
 
 class Attributes(TypedDict):
     url: NotRequired[str] # for link
