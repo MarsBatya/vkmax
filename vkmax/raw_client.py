@@ -185,20 +185,19 @@ class MaxClient:
         self._pending[seq] = future
 
         try:
-            await self.connection.send(json.dumps(request))
-        except websockets.exceptions.ConnectionClosed:
-            self._pending.pop(seq, None)
-            future.cancel()
-            _logger.warning("got ws disconnect in invoke_method")
-            if self._reconnect_callback:
-                _logger.info("reconnecting")
-                await self._reconnect_callback()
-                if retries > 0:
-                    _logger.info("retrying invoke_method after reconnect")
-                    return await self.invoke_method(opcode, payload, retries - 1)
-            return None
+            try:
+                await self.connection.send(json.dumps(request))
+            except websockets.exceptions.ConnectionClosed:
+                future.cancel()
+                _logger.warning("got ws disconnect in invoke_method")
+                if self._reconnect_callback:
+                    _logger.info("reconnecting")
+                    await self._reconnect_callback()
+                    if retries > 0:
+                        _logger.info("retrying invoke_method after reconnect")
+                        return await self.invoke_method(opcode, payload, retries - 1)
+                return None
 
-        try:
             # asyncio.wait, not wait_for: on 3.10 wait_for swallows cancellation
             # when the future is already done, which livelocks task shutdown.
             done, _ = await asyncio.wait({future}, timeout=self.request_timeout)
@@ -289,16 +288,17 @@ class MaxClient:
             return
 
         if packet.get("opcode") == 136:
-            payload = packet.get("payload", {})
-            future = None
+            payload = packet.get("payload")
+            if isinstance(payload, dict):
+                future = None
 
-            if "videoId" in payload:
-                future = self._video_pending.pop(payload["videoId"], None)
-            elif "fileId" in payload:
-                future = self._file_pending.pop(payload["fileId"], None)
+                if "videoId" in payload:
+                    future = self._video_pending.pop(payload["videoId"], None)
+                elif "fileId" in payload:
+                    future = self._file_pending.pop(payload["fileId"], None)
 
-            if future is not None and not future.done():
-                future.set_result(None)
+                if future is not None and not future.done():
+                    future.set_result(None)
 
         if self._incoming_event_callback:
             self._spawn_callback(self._incoming_event_callback(self, packet))

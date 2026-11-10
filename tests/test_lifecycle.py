@@ -20,6 +20,11 @@ class DroppingWebSocket(FakeWebSocket):
         raise ConnectionClosedError(None, None)
 
 
+class RaisingSendWebSocket(FakeWebSocket):
+    async def send(self, data: str) -> None:
+        raise OSError("send failed")
+
+
 async def wait_until(predicate):
     async def poll():
         while not predicate():
@@ -92,6 +97,25 @@ async def test_invoke_method_drop_without_callback_returns_none(make_client):
     assert not client._pending
 
 
+async def test_invoke_method_send_error_cleans_pending(make_client):
+    client = await make_client(RawClient)
+    client._connection = RaisingSendWebSocket()
+
+    with pytest.raises(OSError, match="send failed"):
+        await client.invoke_method(opcode=1, payload={})
+
+    assert not client._pending
+
+
+async def test_invoke_method_serialization_error_cleans_pending(make_client):
+    client = await make_client(RawClient)
+
+    with pytest.raises(TypeError):
+        await client.invoke_method(opcode=1, payload={"bad": ...})
+
+    assert not client._pending
+
+
 async def test_disconnect_fails_pending_futures(make_client):
     client = await make_client(RawClient, auto_reply=False)
     task = asyncio.create_task(client.invoke_method(opcode=1, payload={}))
@@ -153,6 +177,27 @@ async def test_recv_loop_survives_malformed_packets(make_client):
 
     assert response == {"seq": 1, "payload": {"ok": True}}
     assert received == [{"opcode": 128, "payload": {"text": "hi"}}]
+
+
+async def test_recv_loop_survives_malformed_opcode_136_payload(make_client):
+    client = await make_client(RawClient, responses=[{"payload": {"ok": True}}])
+    received = []
+
+    async def callback(client, packet):
+        received.append(packet)
+
+    client.set_packet_callback(callback)
+    client._connection.push_packet({"opcode": 136, "payload": None})
+
+    await wait_until(lambda: received)
+
+    response = await asyncio.wait_for(
+        client.invoke_method(opcode=1, payload={}),
+        timeout=1,
+    )
+
+    assert response["payload"] == {"ok": True}
+    assert received == [{"opcode": 136, "payload": None}]
 
 
 async def test_done_future_in_pending_does_not_kill_loop(make_client):
