@@ -1,4 +1,5 @@
 import asyncio
+import re
 from io import BufferedIOBase
 
 import aiohttp
@@ -13,7 +14,14 @@ class UploadMethods(RawClient):
         message_id: str,
         video_id: int,
     ) -> str:
-        """Requests a direct link to download the video"""
+        """Requests a direct link to download the video.
+
+        The "cache" and "EXTERNAL" entries are ignored. Among the remaining
+        formats the highest resolution wins: keys ending in a number (e.g.
+        MP4_1080) are compared by that number, ties are broken by key name.
+        Keys without a numeric suffix are only used if no numbered format
+        exists (then the lexicographically greatest key wins).
+        """
 
         resp = await self.invoke_method(
             opcode=83,
@@ -28,11 +36,16 @@ class UploadMethods(RawClient):
             raise ValueError("Video not found")
 
         formats = resp["payload"]
-        del formats["cache"]
-        del formats["EXTERNAL"]
+        formats.pop("cache", None)
+        formats.pop("EXTERNAL", None)
+        if not formats:
+            raise ValueError("Video has no downloadable formats")
 
-        # return first url
-        return list(formats.values())[0]
+        def quality(key: str) -> tuple[int, str]:
+            match = re.search(r"(\d+)$", key)
+            return (int(match.group(1)) if match else -1, key)
+
+        return formats[max(formats, key=quality)]
 
     async def download_file(
         self,
