@@ -6,7 +6,6 @@ from pathlib import Path
 import aiohttp
 
 from vkmax.client import MaxClient
-from vkmax.functions.messages import edit_message
 
 
 # setup logging with custom format and level `info`
@@ -17,33 +16,28 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# global aiohttp session
-http = None
-
-
 async def get_weather(city: str) -> str:
-    global http
-    if not http:
-        http = aiohttp.ClientSession()
-    response = await http.get(f"https://ru.wttr.in/{city}?Q&T&format=3")
-    return await response.text()
+    async with aiohttp.ClientSession() as http:
+        async with http.get(f"https://ru.wttr.in/{city}?Q&T&format=3") as response:
+            return await response.text()
 
 
 async def packet_callback(client: MaxClient, packet: dict):
     if packet['opcode'] == 128:
         message_text: str = packet['payload']['message']['text']
-        if message_text not in ['.info', '.weather']:
-            return
-
         if message_text == ".info":
             text = "Userbot connected"
 
-        elif ".weather" in message_text:
-            city = message_text.split()[1]
+        elif message_text.startswith(".weather "):
+            city = message_text.removeprefix(".weather ").strip()
+            if not city:
+                return
             text = await get_weather(city)
 
-        await edit_message(
-            client,
+        else:
+            return
+
+        await client.edit_message(
             packet["payload"]["chatId"],
             packet["payload"]["message"]["id"],
             text
@@ -71,12 +65,9 @@ async def main():
     else:
         contents = session_file.read_text()
         device_id, login_token = contents.split('\n', maxsplit=1)
-        try:
-            await client.login_by_token(login_token, device_id)
-        except:
-            print("Couldn't login by token")
+        await client.login_by_token(login_token, device_id)
 
-    await client.set_callback(packet_callback)
+    client.set_packet_callback(packet_callback)
 
     await asyncio.Future()  # run forever
 

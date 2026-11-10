@@ -10,8 +10,12 @@ readme = "README.md"
 authors = [{name = "nsdkinx", email = "nsdkinx@ya.ru" }]
 license = { file = "LICENSE" }
 classifiers = [
-    "Programming Language :: Python",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 keywords = ["vk", "vkapi", "max-messenger", "vkmax", "oneme"]
 dependencies = [
@@ -20,7 +24,24 @@ dependencies = [
     "adaptix==3.0.0b11",
     "python-socks",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "ruff", "requests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error::ResourceWarning"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+extend-exclude = ["build", "vkmax.egg-info"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "C901", "S311", "E501"]
 
 [project.urls]
 Homepage = "https://github.com/nsdkinx/vkmax"

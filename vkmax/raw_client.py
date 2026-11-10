@@ -4,6 +4,7 @@ import json
 import logging
 import ssl
 import uuid
+from copy import deepcopy
 from functools import wraps
 from typing import Any, Awaitable, Callable, Optional, TypedDict, TypeVar
 
@@ -65,7 +66,7 @@ class MaxClient:
 
     def __init__(
         self,
-        user_agent_dict: UserAgentDict = DEFAULT_USER_AGENT_DICT,
+        user_agent_dict: Optional[UserAgentDict] = None,
         proxy_url: Optional[str] = None,
     ):
         self._connection: Optional[ClientConnection] = None
@@ -80,7 +81,9 @@ class MaxClient:
         self._pending = {}
         self._video_pending = {}
         self._file_pending = {}
-        self.user_agent = user_agent_dict
+        self.user_agent = (
+            deepcopy(DEFAULT_USER_AGENT_DICT) if user_agent_dict is None else user_agent_dict
+        )
         self.proxy_url = proxy_url
 
     # --- WebSocket connection management ---

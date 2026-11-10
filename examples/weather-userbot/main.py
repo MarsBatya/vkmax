@@ -1,11 +1,10 @@
 import asyncio
 import logging
 
-import requests
+import aiohttp
 import sys
 
 from vkmax.client import MaxClient
-from vkmax.functions.messages import edit_message
 
 from pathlib import Path
 
@@ -24,25 +23,27 @@ logging.basicConfig(
 )
 
 async def get_weather(city: str) -> str:
-    response = requests.get(f"https://ru.wttr.in/{city}?Q&T&format=3")
-    return response.text
+    async with aiohttp.ClientSession() as http:
+        async with http.get(f"https://ru.wttr.in/{city}?Q&T&format=3") as response:
+            return await response.text()
 
 
 async def packet_callback(client: MaxClient, packet: dict):
     if packet['opcode'] == 128:
         message_text: str = packet['payload']['message']['text']
-        if message_text not in ['.info', '.weather']:
-            return
-
         if message_text == ".info":
             text = "Userbot connected"
 
-        elif ".weather" in message_text:
-            city = message_text.split()[1]
+        elif message_text.startswith(".weather "):
+            city = message_text.removeprefix(".weather ").strip()
+            if not city:
+                return
             text = await get_weather(city)
 
-        await edit_message(
-            client,
+        else:
+            return
+
+        await client.edit_message(
             packet["payload"]["chatId"],
             packet["payload"]["message"]["id"],
             text
@@ -56,22 +57,25 @@ async def main():
 
     login_token_file = Path('login_token.txt')
 
+    authenticated = False
     if login_token_file.exists():
         login_token_from_file = login_token_file.read_text(encoding='utf-8').strip()
         try:
             await client.login_by_token(login_token_from_file)
-        except:
+            authenticated = True
+        except Exception:
             print("Couldn't login by token. Falling back to SMS login")
 
-    else:
-        sms_login_token = await client.send_code('+79294066397')
+    if not authenticated:
+        phone_number = input('Enter your phone number: ')
+        sms_login_token = await client.send_code(phone_number)
         sms_code = int(input('Enter SMS code: '))
         account_data = await client.sign_in(sms_login_token, sms_code)
 
         login_token = account_data['payload']['tokenAttrs']['LOGIN']['token']
         login_token_file.write_text(login_token, encoding='utf-8')
 
-    await client.set_callback(packet_callback)
+    client.set_packet_callback(packet_callback)
 
     await asyncio.Future()  # run forever
 

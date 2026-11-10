@@ -80,60 +80,16 @@ class GroupMethods(RawClient):
         You need to be a group owner or administrator to use this method.
         """
 
-        # minimal admin: 120
-        # minimal admin + deleting msgs: 121
-        # minimal admin + deleting msgs + participants: 123
-        # full_admin: 255
-        # minimal admin + set_admins: 124
-        # minimal admin + set_admins + deleting msgs: 125
-        # minimal admin + set_admins + participants: 254
-        # minimal admin + participants: 250
-        # minimal admin + deletings msgs + participants: 251
-        permissions = (
-            120
-            if not deleting_messages and not control_participants and not control_admins
-            else ...
-        )
-        permissions = (
-            121
-            if deleting_messages and not control_participants and not control_admins
-            else ...
-        )
-        permissions = (
-            123
-            if deleting_messages and control_participants and not control_admins
-            else ...
-        )
-        permissions = (
-            124
-            if not deleting_messages and not control_participants and control_admins
-            else ...
-        )
-        permissions = (
-            125
-            if deleting_messages and not control_participants and control_admins
-            else ...
-        )
-        permissions = (
-            250
-            if not deleting_messages and control_participants and not control_admins
-            else ...
-        )
-        permissions = (
-            251
-            if deleting_messages and control_participants and not control_admins
-            else ...
-        )
-        permissions = (
-            254
-            if not deleting_messages and control_participants and control_admins
-            else ...
-        )
-        permissions = (
-            255
-            if deleting_messages and control_participants and control_admins
-            else ...
-        )
+        permissions = {
+            (False, False, False): 120,
+            (True, False, False): 121,
+            (False, True, False): 250,
+            (True, True, False): 251,
+            (False, False, True): 124,
+            (True, False, True): 125,
+            (False, True, True): 254,
+            (True, True, True): 255,
+        }[(deleting_messages, control_participants, control_admins)]
 
         return await self.invoke_method(
             opcode=77,
@@ -141,12 +97,12 @@ class GroupMethods(RawClient):
                 "chatId": group_id,
                 "userIds": admin_ids,
                 "type": "ADMIN",
-                "operation": "remove",
+                "operation": "add",
                 "permissions": permissions,
             },
         )
 
-    async def remove_admin(self, group_id: int, admin_ids=list[int]):
+    async def remove_admin(self, group_id: int, admin_ids: list[int]):
         """
         Removes an admin from group.
         You need to be a group owner or administrator to use this method.
@@ -258,10 +214,6 @@ class GroupMethods(RawClient):
             raise ValueError("Failed to join group")
         chat_id = data["payload"]["chat"]["id"]
         cid = data["payload"]["chat"]["cid"]
-        await self.invoke_method(
-            opcode=75,
-            payload={"chatId": 381006, "subscribe": False},
-        )
         await self.invoke_method(
             opcode=75,
             payload={"chatId": chat_id, "subscribe": True},
