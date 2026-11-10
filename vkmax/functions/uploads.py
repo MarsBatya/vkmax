@@ -95,8 +95,7 @@ class UploadMethods(RawClient):
             filename="image.jpg",
             mimetype="image/jpeg",
         )
-        obj = await resp.json()
-        token = list(obj["photos"].values())[0]["token"]
+        token = list(resp["photos"].values())[0]["token"]
 
         return {
             "_type": "PHOTO",
@@ -203,8 +202,11 @@ class UploadMethods(RawClient):
         attach_type: str,
         filename: str,
         mimetype: str,
-    ) -> aiohttp.ClientResponse:
-        """Internal helper function"""
+    ) -> dict:
+        """Posts the stream and returns the parsed JSON response.
+
+        The stream belongs to the caller: it is read here but never closed.
+        """
 
         await self.invoke_method(
             opcode=65,
@@ -228,22 +230,18 @@ class UploadMethods(RawClient):
         if not self._http_pool:
             self._http_pool = aiohttp.ClientSession()
 
-        with stream as file:
-            data = aiohttp.FormData()
-            data.add_field(
-                "file",
-                file,
-                filename=filename,
-                content_type=mimetype,
-            )
+        data = aiohttp.FormData()
+        data.add_field(
+            "file",
+            stream,
+            filename=filename,
+            content_type=mimetype,
+        )
 
-            resp = await self._http_pool.post(
-                url,
-                headers=headers,
-                data=data,
-            )
+        async with self._http_pool.post(
+            url,
+            headers=headers,
+            data=data,
+        ) as resp:
             resp.raise_for_status()
-
-        # at this point formdata is already sent
-        # (i hope so)
-        return resp
+            return await resp.json(content_type=None)
