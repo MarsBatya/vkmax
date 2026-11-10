@@ -2,10 +2,16 @@ from dataclasses import dataclass
 
 from typing import Literal, Optional, Union
 
-from vkmax.types.enums import LinkType, ChatAccess, MessageType, MessageStatus, AttachmentType, PreviewType, ButtonType
+from vkmax.types.enums import (
+    LinkType,
+    ChatAccess,
+    MessageType,
+    MessageStatus,
+    AttachmentType,
+    PreviewType,
+    ButtonType,
+)
 from vkmax.types.elements import MessageElement
-
-
 
 
 @dataclass(slots=True)
@@ -18,12 +24,14 @@ class AttachedPhoto:
     _type: Literal[AttachmentType.PHOTO]
     preview_data: Optional[str] = None
 
+
 @dataclass(slots=True)
 class SimpleImage:
     _type: Literal[AttachmentType.PHOTO]
     width: int
     height: int
     url: str
+
 
 @dataclass(slots=True)
 class AttachedShare:
@@ -34,6 +42,7 @@ class AttachedShare:
     title: str
     url: str
     image: Optional[SimpleImage] = None
+
 
 @dataclass(slots=True)
 class AttachedSticker:
@@ -129,11 +138,13 @@ class AttachedKeyboard:
     keyboard: Keyboard
     callback_id: str
 
+
 @dataclass(slots=True)
 class AttachedControl:
     _type: Literal[AttachmentType.CONTROL]
     event: str
     pinned_message: "Message"
+
 
 Attachment = Union[
     AttachedPhoto,
@@ -144,6 +155,7 @@ Attachment = Union[
     AttachedControl,
     AttachedShare,
 ]
+
 
 @dataclass(slots=True)
 class Link:
@@ -158,6 +170,7 @@ class Link:
     chat_name: Optional[str] = None
     content_level: Optional[bool] = None
 
+
 @dataclass(slots=True)
 class Stats:
     views: int
@@ -169,16 +182,19 @@ class DelayedAttributes:
     notify_sender: bool
     time_to_fire: int
 
+
 @dataclass(slots=True)
 class ReactionCounter:
     count: int
     reaction: str
+
 
 @dataclass(slots=True)
 class ReactionInfo:
     counters: Optional[list[ReactionCounter]] = None
     your_reaction: Optional[str] = None
     total_count: Optional[int] = None
+
 
 @dataclass(slots=True)
 class UserMessage:
@@ -215,7 +231,6 @@ class ChannelMessage:
     cid: Optional[int] = None
     elements: Optional[list[MessageElement]] = None
     link: Optional[Link] = None
-    reaction_info: Optional[ReactionInfo] = None
     delayed_attributes: Optional[DelayedAttributes] = None
 
 

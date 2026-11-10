@@ -1,12 +1,14 @@
 from random import randint
-from typing import Optional
+from typing import Any, Optional
 
 
 from vkmax.raw_client import MaxClient as RawClient
 
 
 class GroupMethods(RawClient):
-    async def create_group(self, group_name: str, participant_ids: list[int]):
+    async def create_group(
+        self, group_name: str, participant_ids: list[int]
+    ) -> Optional[dict[str, Any]]:
         """Creates a group"""
 
         return await self.invoke_method(
@@ -35,8 +37,8 @@ class GroupMethods(RawClient):
         self,
         group_id: int,
         participant_ids: list[int],
-        show_history=True,
-    ):
+        show_history: bool = True,
+    ) -> Optional[dict[str, Any]]:
         """Invites users into group via userid"""
 
         return await self.invoke_method(
@@ -54,7 +56,7 @@ class GroupMethods(RawClient):
         group_id: int,
         participant_ids: list[int],
         delete_messages: bool = False,
-    ):
+    ) -> Optional[dict[str, Any]]:
         """Removes users from group via userid"""
 
         return await self.invoke_method(
@@ -74,7 +76,7 @@ class GroupMethods(RawClient):
         deleting_messages: bool = False,
         control_participants: bool = False,
         control_admins: bool = False,
-    ):
+    ) -> Optional[dict[str, Any]]:
         """
         Adds an admin to group.
         You need to be a group owner or administrator to use this method.
@@ -102,7 +104,9 @@ class GroupMethods(RawClient):
             },
         )
 
-    async def remove_admin(self, group_id: int, admin_ids: list[int]):
+    async def remove_admin(
+        self, group_id: int, admin_ids: list[int]
+    ) -> Optional[dict[str, Any]]:
         """
         Removes an admin from group.
         You need to be a group owner or administrator to use this method.
@@ -118,7 +122,9 @@ class GroupMethods(RawClient):
             },
         )
 
-    async def transfer_group_ownership(self, group_id: int, new_owner_id: int):
+    async def transfer_group_ownership(
+        self, group_id: int, new_owner_id: int
+    ) -> Optional[dict[str, Any]]:
         """Transfers ownership of the group to a new user"""
 
         return await self.invoke_method(
@@ -132,7 +138,7 @@ class GroupMethods(RawClient):
         all_can_pin_message: bool = False,
         only_owner_can_change_icon_title: bool = True,
         only_admin_can_add_member: bool = True,
-    ):
+    ) -> Optional[dict[str, Any]]:
         """Changes basic group settings"""
 
         options = {
@@ -153,10 +159,10 @@ class GroupMethods(RawClient):
         group_id: int,
         new_group_name: Optional[str] = None,
         new_description: Optional[str] = None,
-    ):
+    ) -> Optional[dict[str, Any]]:
         """Just changes a group public profile"""
 
-        payload = {"chatId": group_id}
+        payload: dict[str, Any] = {"chatId": group_id}
         if new_group_name is not None:
             payload["theme"] = new_group_name
         if new_description is not None:
@@ -167,7 +173,9 @@ class GroupMethods(RawClient):
 
         return await self.invoke_method(opcode=55, payload=payload)
 
-    async def get_group_members(self, group_id: int, marker=0, count=500):
+    async def get_group_members(
+        self, group_id: int, marker: int = 0, count: int = 500
+    ) -> Optional[dict[str, Any]]:
         """
         Gets all the members in specified chat.
         :param marker: User ID to begin with
@@ -186,14 +194,14 @@ class GroupMethods(RawClient):
             },
         )
 
-    async def resolve_group_by_link(self, link_hash: str):
+    async def resolve_group_by_link(self, link_hash: str) -> Optional[dict[str, Any]]:
         """Gets group info by invite hash"""
         return await self.invoke_method(
             opcode=89,
             payload={"link": f"join/{link_hash}"},
         )
 
-    async def join_group_by_link(self, link_hash: str):
+    async def join_group_by_link(self, link_hash: str) -> None:
         """Join group by its invite hash"""
         data = await self.invoke_method(
             opcode=57,
@@ -219,7 +227,9 @@ class GroupMethods(RawClient):
         )
         return
 
-    async def react_to_message(self, group_id: int, message_id: int, reaction: str):
+    async def react_to_message(
+        self, group_id: int, message_id: int, reaction: str
+    ) -> None:
         """React to a message in a group"""
         await self.invoke_method(
             opcode=178,

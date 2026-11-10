@@ -11,8 +11,8 @@ seq-matched JSON-RPC protocol over WebSocket (`wss://ws-api.oneme.ru/websocket`)
   (`UploadMethods` subclasses the raw client; `MessageMethods` subclasses `UploadMethods`).
   Import path for users is `vkmax.client.MaxClient`.
 - `vkmax/types/`, `vkmax/utils/` — TypedDicts/enums and formatting helpers.
-- `vkmax/routing.py`, `vkmax/packet.py` — experimental, not wired into dispatch; don't
-  build on them without an explicit decision.
+- `vkmax/routing.py` — experimental, not wired into dispatch; don't build on it
+  without an explicit decision.
 - `tests/` — pytest suite; `tests/conftest.py` provides `FakeWebSocket` + `make_client`.
 - `docs/protocol.md`, `docs/opcodes.md` — protocol reference; verify wire constants here
   or against the live API before changing them.
@@ -25,9 +25,10 @@ uv sync --extra dev          # install (uv.lock is authoritative; pip: python -m
 uv run pytest -q             # full suite (CI gate)
 uv run pytest tests/test_lifecycle.py -q   # focused file; ::test_name for a single test
 uv run ruff check vkmax      # lint (CI gate, config in pyproject.toml)
+uv run mypy                  # type check (CI gate, scoped to vkmax/ in pyproject.toml)
 ```
 
-CI (`.github/workflows/tests.yml`) runs import smoke + `ruff check vkmax` + `pytest -q`
+CI (`.github/workflows/tests.yml`) runs import smoke + `ruff check vkmax` + `mypy` + `pytest -q`
 on Python 3.10–3.13. Verify on 3.10 (the floor) as well as the local interpreter when
 touching runtime code; no 3.11+ APIs (e.g. `asyncio.timeout`).
 

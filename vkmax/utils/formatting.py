@@ -112,7 +112,7 @@ class _HTMLParser(HTMLParser):
 
         if tag in ("emoji", "animoji"):
             # <emoji id=65>💀</emoji> or <animoji id=65>💀</animoji>
-            attributes = {}
+            attributes: dict = {}
             for attr_name, attr_value in attrs:
                 if attr_name == "id" and attr_value is not None:
                     frame["entityId"] = int(attr_value)
@@ -244,7 +244,7 @@ def unparse_text(clean_text: str, elements: list[Element]) -> str:
 
 
 def main() -> None:
-    import ujson as json
+    import json
 
     sample_html = (
         "Тестовый пост\n\n"

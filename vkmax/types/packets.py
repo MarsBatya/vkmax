@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, Union, get_args
 
 from adaptix import Chain, Retort, NameStyle, loader, name_mapping
 
@@ -37,7 +37,7 @@ class Payload:
     _flag: Literal["_NORMAL"] = "_NORMAL"
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: dict) -> "Payload":
         return _retort.load(data, cls)
 
     def to_dict(self) -> dict:
@@ -47,11 +47,13 @@ class Payload:
     def part_to_dict(cls, anything: Any) -> dict:
         return _retort.dump(anything)
 
+
 @dataclass(slots=True)
 class DeletedPayload:
     chat_id: int
     message_ids: list[str]
     _flag: Literal["_DELETED"] = "_DELETED"
+
 
 @dataclass(slots=True)
 class ChatPayload:
@@ -64,12 +66,16 @@ class ChatPayload:
     unread: Optional[int] = None
     _flag: Literal["_CHAT"] = "_CHAT"
 
+
 @dataclass(slots=True)
 class EditedMessagePayload:
     message: Message
     _flag: Literal["_EDITED"] = "_EDITED"
 
+
 # ---------------- Packet ----------------
+
+PacketPayload = Union[Payload, DeletedPayload, ChatPayload, EditedMessagePayload]
 
 
 @dataclass(slots=True)
@@ -78,10 +84,10 @@ class Packet:
     cmd: int
     seq: int
     opcode: int
-    payload: Union[Payload, DeletedPayload, ChatPayload, EditedMessagePayload]
+    payload: PacketPayload
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: dict) -> "Packet":
         return _retort.load(data, cls)
 
     def to_dict(self) -> dict:
@@ -90,6 +96,7 @@ class Packet:
     @classmethod
     def part_to_dict(cls, anything: Any) -> dict:
         return _retort.dump(anything)
+
 
 # more control over what to load
 def packet_loader(data: dict):
@@ -102,6 +109,7 @@ def packet_loader(data: dict):
     else:
         data["payload"]["_flag"] = "_NORMAL"
     return data
+
 
 _retort = Retort(
     recipe=[
@@ -130,7 +138,7 @@ _retort = Retort(
                 name_style=NameStyle.CAMEL,
                 map={"_type": "_type"},
             )
-            for _type in Preview.__args__
+            for _type in get_args(Preview)
         ),
         *(
             name_mapping(
@@ -139,7 +147,7 @@ _retort = Retort(
                 map={"_type": "_type"},
                 omit_default=True,
             )
-            for _type in (*Attachment.__args__, SimpleImage)
+            for _type in (*get_args(Attachment), SimpleImage)
         ),
         name_mapping(
             Link,
@@ -164,7 +172,7 @@ _retort = Retort(
                     "message_type": "type",
                 },
             )
-            for _type in Message.__args__
+            for _type in get_args(Message)
         ),
         *(
             name_mapping(
@@ -176,7 +184,7 @@ _retort = Retort(
                     "start_from": "from",
                 },
             )
-            for _type in MessageElement.__args__
+            for _type in get_args(MessageElement)
         ),
         name_mapping(
             AnimojiAttributes,

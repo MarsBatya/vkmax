@@ -1,11 +1,11 @@
 from pathlib import Path
 from random import randint
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 from vkmax.types.formatting import Element
 from vkmax.functions.uploads import UploadMethods
 from vkmax.utils.formatting import parse_text
-from vkmax.types.packets import Packet
+from vkmax.types.packets import Packet, PacketPayload
 
 # common backward-compatible type
 # for functions accepting a message id
@@ -13,7 +13,6 @@ MessageId = Union[str, int]
 
 
 class MessageMethods(UploadMethods):
-
     async def send_message(
         self,
         chat_id: int,
@@ -21,18 +20,18 @@ class MessageMethods(UploadMethods):
         notify: bool = True,
         reply_to: Optional[MessageId] = None,
         elements: list[Element] | None = None,
-        attaches: list | None = None,
+        attaches: list[dict[str, Any]] | None = None,
         formatting: bool = False,
-    ):
+    ) -> PacketPayload:
         """Sends message to specified chat"""
 
         if attaches is None:
             attaches = []
-        
+
         if formatting:
             text, elements = parse_text(text)
 
-        payload = {
+        payload: dict[str, Any] = {
             "chatId": chat_id,
             "message": {
                 "text": text,
@@ -58,19 +57,18 @@ class MessageMethods(UploadMethods):
         )
         if not result:
             raise ValueError("Failed to retrieve send message info")
-        
-        return Packet.from_dict(result).payload
 
+        return Packet.from_dict(result).payload
 
     async def edit_message(
         self,
         chat_id: int,
         message_id: MessageId,
         text: str,
-        attaches: list | None = None,
+        attaches: list[dict[str, Any]] | None = None,
         elements: list[Element] | None = None,
         formatting: bool = False,
-    ):
+    ) -> PacketPayload:
         """Edits the specified message"""
 
         if attaches is None:
@@ -96,13 +94,12 @@ class MessageMethods(UploadMethods):
             result["payload"]["chatId"] = chat_id
         return Packet.from_dict(result).payload
 
-
     async def delete_message(
         self,
         chat_id: int,
-        message_ids: list,
+        message_ids: list[MessageId],
         delete_for_me: bool = False,
-    ):
+    ) -> PacketPayload:
         """Deletes the specified message"""
 
         result = await self.invoke_method(
@@ -117,13 +114,12 @@ class MessageMethods(UploadMethods):
             raise ValueError("Failed to retrieve delete message info")
         return Packet.from_dict(result).payload
 
-
     async def pin_message(
         self,
         chat_id: int,
         message_id: MessageId,
         notify: bool = False,
-    ):
+    ) -> PacketPayload:
         """Pins message in the chat"""
 
         result = await self.invoke_method(
@@ -139,7 +135,6 @@ class MessageMethods(UploadMethods):
             raise ValueError("Failed to retrieve pin message info")
         return Packet.from_dict(result).payload
 
-
     async def reply_message(
         self,
         chat_id: int,
@@ -148,7 +143,7 @@ class MessageMethods(UploadMethods):
         notify: bool = True,
         elements: list[Element] | None = None,
         formatting: bool = False,
-    ):
+    ) -> PacketPayload:
         """Replies to message in the chat"""
 
         return await self.send_message(
@@ -160,7 +155,6 @@ class MessageMethods(UploadMethods):
             formatting=formatting,
         )
 
-
     async def send_photo(
         self,
         chat_id: int,
@@ -169,7 +163,7 @@ class MessageMethods(UploadMethods):
         notify: bool = True,
         elements: list[Element] | None = None,
         formatting: bool = False,
-    ):
+    ) -> PacketPayload:
         """Sends photo to specified chat"""
 
         with open(image_path, "rb") as stream:
@@ -184,7 +178,6 @@ class MessageMethods(UploadMethods):
             formatting=formatting,
         )
 
-
     async def send_file(
         self,
         chat_id: int,
@@ -193,7 +186,7 @@ class MessageMethods(UploadMethods):
         notify: bool = True,
         elements: list[Element] | None = None,
         formatting: bool = False,
-    ):
+    ) -> PacketPayload:
         """Sends a file to the specified chat"""
 
         path: Path = Path(file_path)

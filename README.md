@@ -10,18 +10,26 @@ This is a client library for MAX, allowing to create userbots and custom clients
 An example of a simple userbot that retrieves weather can be found at [examples/weather-userbot](examples/weather-userbot).
 
 ## Installation
-Requires Python 3.10 or newer.
+Requires Python 3.10 or newer (tested on 3.10–3.13). The package ships type
+annotations (`py.typed`).
 
 The package is [available on PyPI](https://pypi.org/project/vkmax/)  
 `pip install vkmax`
 
-For local development and tests:
+For local development and tests (uv is the primary workflow; `uv.lock` is authoritative):
+```sh
+uv sync --extra dev
+uv run pytest -q
+uv run ruff check vkmax
+uv run mypy
+```
+
+With pip instead of uv:
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev]"
 pytest -q
-ruff check vkmax
 ```
 
 ## Usage
@@ -94,6 +102,10 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+The session file (`max_session.txt` above) stores your device ID and login
+token. Treat it as a live credential: never commit it to version control or
+share it.
 
 ## Logging and privacy
 

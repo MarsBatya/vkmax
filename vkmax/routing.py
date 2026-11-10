@@ -1,8 +1,14 @@
+"""Experimental packet router.
+
+Not wired into MaxClient dispatch — the supported dispatch path is
+`MaxClient.set_packet_callback`. Don't build on this without an explicit
+decision to promote it.
+"""
+
 from dataclasses import dataclass
 from functools import partial
 from inspect import iscoroutinefunction
-from typing import Awaitable, Callable, TypeVar, cast
-
+from typing import Any, Awaitable, Callable, TypeVar, cast
 
 from vkmax.client import MaxClient
 from vkmax.types.packets import Packet, Payload
@@ -11,11 +17,12 @@ from vkmax.types.packets import Packet, Payload
 async def pass_all(client: MaxClient, packet: Packet) -> bool:
     return True
 
+
 @dataclass
 class Handler:
     condition: Callable[[MaxClient, Packet], Awaitable[bool]]
     # handlers usually don't need full packet info, proper payload is enough
-    callback: Callable[[MaxClient, Payload], Awaitable]
+    callback: Callable[[MaxClient, Payload], Awaitable[Any]]
 
 
 async def awaitable_filter(
@@ -25,11 +32,12 @@ async def awaitable_filter(
 ) -> bool:
     return condition(client, packet)
 
-Coro = TypeVar("Coro", bound=Callable[[MaxClient, Payload], Awaitable])
+
+Coro = TypeVar("Coro", bound=Callable[[MaxClient, Payload], Awaitable[Any]])
+
 
 class Router:
     """
-
     example usage:
     ```python
     router = Router(
@@ -48,9 +56,10 @@ class Router:
         await client.send_message(payload.chat_id, "Hello!")
 
     ...
-    router.process_update(client, packet)
+    await router.process_update(client, packet)
     ```
     """
+
     def __init__(
         self,
         condition: Callable[[MaxClient, Packet], bool | Awaitable[bool]] = pass_all,
@@ -71,7 +80,7 @@ class Router:
     def handler(
         self,
         condition: Callable[[MaxClient, Packet], bool | Awaitable[bool]] = pass_all,
-    ):
+    ) -> Callable[[Coro], Coro]:
         def wrapper(callback: Coro) -> Coro:
             self.handlers.append(
                 Handler(
@@ -91,17 +100,13 @@ class Router:
             )
             return callback
 
-            # async def wrapped(client: MaxClient, packet: Packet):
-            #     return await callback(client, packet)
-
-            # return wrapped
-
         return wrapper
 
-    async def process_update(self, client: MaxClient, packet: Packet):
+    async def process_update(self, client: MaxClient, packet: Packet) -> bool:
+        """Runs the first matching handler; returns whether one ran."""
         if await self.condition(client, packet):
             for handler in self.handlers:
                 if await handler.condition(client, packet):
                     await handler.callback(client, cast(Payload, packet.payload))
                     return True
-        return None
+        return False

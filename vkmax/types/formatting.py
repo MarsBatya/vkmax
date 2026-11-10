@@ -1,13 +1,14 @@
-
+import sys
 from typing import Literal, TypedDict
 
-try:
+if sys.version_info >= (3, 11):
     from typing import NotRequired
-except ImportError:
+else:
     from typing_extensions import NotRequired
 
+
 class Attributes(TypedDict):
-    url: NotRequired[str] # for link
+    url: NotRequired[str]  # for link
     animojiSetId: NotRequired[str]
     animojiLottieUrl: NotRequired[str]
 

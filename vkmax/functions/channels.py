@@ -1,29 +1,32 @@
 from random import randint
+from typing import Any, Optional
 
 from vkmax.raw_client import MaxClient as RawClient
 
 
 class ChannelMethods(RawClient):
-    async def resolve_channel_username(self, username: str):
+    async def resolve_channel_username(self, username: str) -> Optional[dict[str, Any]]:
         """Resolving channel by username"""
 
         return await self.invoke_method(
-            opcode=89, payload={"link": f"https://max.ru/{username}"},
+            opcode=89,
+            payload={"link": f"https://max.ru/{username}"},
         )
 
-    async def resolve_channel_id(self, channel_id: int):
+    async def resolve_channel_id(self, channel_id: int) -> Optional[dict[str, Any]]:
         """Resolve channel by id"""
 
         return await self.invoke_method(opcode=48, payload={"chatIds": [channel_id]})
 
-    async def join_channel(self, username: str):
+    async def join_channel(self, username: str) -> Optional[dict[str, Any]]:
         """Joining a channel and resolving"""
 
         return await self.invoke_method(
-            opcode=57, payload={"link": f"https://max.ru/{username}"},
+            opcode=57,
+            payload={"link": f"https://max.ru/{username}"},
         )
 
-    async def create_channel(self, channel_name: str):
+    async def create_channel(self, channel_name: str) -> Optional[dict[str, Any]]:
         return await self.invoke_method(
             opcode=64,
             payload={
@@ -42,7 +45,9 @@ class ChannelMethods(RawClient):
             },
         )
 
-    async def mute_channel(self, channel_id: int, mute: bool = True):
+    async def mute_channel(
+        self, channel_id: int, mute: bool = True
+    ) -> Optional[dict[str, Any]]:
         """Mutes or unmutes a channel"""
 
         return await self.invoke_method(

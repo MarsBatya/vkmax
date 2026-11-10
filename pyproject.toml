@@ -21,19 +21,35 @@ keywords = ["vk", "vkapi", "max-messenger", "vkmax", "oneme"]
 dependencies = [
     "aiohttp",
     "websockets",
+    # No stable adaptix 3.x release exists; pinned to the beta the packet retort is tested against.
     "adaptix==3.0.0b11",
     "python-socks",
+    "typing-extensions; python_version < '3.11'",
 ]
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio", "ruff", "requests"]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "requests",
+    "mypy",
+    "tomli; python_version < '3.11'",
+]
+
+[tool.setuptools.package-data]
+vkmax = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["error::ResourceWarning"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["vkmax"]
 
 [tool.ruff]
 target-version = "py310"

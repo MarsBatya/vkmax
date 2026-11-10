@@ -36,6 +36,9 @@ def _redact(value: Any) -> Any:
 
 Coro = TypeVar("Coro", bound=Callable[..., Awaitable])
 
+PacketCallback = Callable[["MaxClient", dict[str, Any]], Coroutine[Any, Any, Any]]
+ReconnectCallback = Callable[[], Coroutine[Any, Any, Any]]
+
 
 def ensure_connected(method: Coro) -> Coro:
     @wraps(method)
@@ -91,8 +94,8 @@ class MaxClient:
         self._seq = itertools.count(1)
         self._keepalive_task: Optional[asyncio.Task] = None
         self._recv_task: Optional[asyncio.Task] = None
-        self._incoming_event_callback = None
-        self._reconnect_callback = None
+        self._incoming_event_callback: Optional[PacketCallback] = None
+        self._reconnect_callback: Optional[ReconnectCallback] = None
         self._pending: dict[int, asyncio.Future] = {}
         self._video_pending: dict[int, asyncio.Future] = {}
         self._file_pending: dict[int, asyncio.Future] = {}
@@ -107,13 +110,13 @@ class MaxClient:
 
     # --- WebSocket connection management ---
 
-    async def connect(self):
+    async def connect(self) -> ClientConnection:
         if self._connection:
             raise Exception("Already connected")
 
         _logger.info(f"Connecting to {WS_HOST}...")
 
-        extra_kwargs = {}
+        extra_kwargs: dict[str, Any] = {}
         if self.proxy_url:
             proxy = Proxy.from_url(self.proxy_url)
             sock = await proxy.connect(dest_host="ws-api.oneme.ru", dest_port=443)
@@ -143,7 +146,7 @@ class MaxClient:
             raise RuntimeError("WebSocket not connected. Call .connect() first.")
         return self._connection
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         await self._stop_keepalive_task()
         if self._recv_task:
             self._recv_task.cancel()
@@ -165,7 +168,7 @@ class MaxClient:
         opcode: int,
         payload: dict[str, Any],
         retries: int = 2,
-    ):
+    ) -> Optional[dict[str, Any]]:
         seq = next(self._seq)
 
         request = {
@@ -222,7 +225,7 @@ class MaxClient:
 
         return response
 
-    async def set_callback(self, function):
+    async def set_callback(self, function: PacketCallback) -> None:
         import warnings
 
         warnings.warn(
@@ -232,18 +235,18 @@ class MaxClient:
         )
         self.set_packet_callback(function)
 
-    def set_packet_callback(self, function):
+    def set_packet_callback(self, function: PacketCallback) -> None:
         if not asyncio.iscoroutinefunction(function):
             raise TypeError("callback must be async")
         self._incoming_event_callback = function
 
-    def set_reconnect_callback(self, function):
+    def set_reconnect_callback(self, function: ReconnectCallback) -> None:
         if not asyncio.iscoroutinefunction(function):
             raise TypeError("callback must be async")
         self._reconnect_callback = function
 
     @ensure_connected
-    async def _recv_loop(self):
+    async def _recv_loop(self) -> None:
         try:
             while True:
                 try:
@@ -279,7 +282,7 @@ class MaxClient:
 
     def _handle_packet(self, packet: dict[str, Any]) -> None:
         seq = packet.get("seq")
-        future = self._pending.pop(seq, None)
+        future = self._pending.pop(seq, None) if seq is not None else None
         if future is not None:
             if not future.done():
                 future.set_result(packet)
@@ -321,11 +324,11 @@ class MaxClient:
     # --- Keepalive system
 
     @ensure_connected
-    async def _send_keepalive_packet(self):
+    async def _send_keepalive_packet(self) -> None:
         await self.invoke_method(opcode=1, payload={"interactive": False})
 
     @ensure_connected
-    async def _keepalive_loop(self):
+    async def _keepalive_loop(self) -> None:
         _logger.info("keepalive task started")
         try:
             while True:
@@ -337,14 +340,14 @@ class MaxClient:
             _logger.warning("keepalive stopped: connection lost")
 
     @ensure_connected
-    async def _start_keepalive_task(self):
+    async def _start_keepalive_task(self) -> None:
         if self._keepalive_task:
             raise Exception("Keepalive task already started")
 
         self._keepalive_task = asyncio.create_task(self._keepalive_loop())
         return
 
-    async def _stop_keepalive_task(self):
+    async def _stop_keepalive_task(self) -> None:
         if not self._keepalive_task:
             return
         self._keepalive_task.cancel()
@@ -354,7 +357,9 @@ class MaxClient:
     # --- Authentication ---
 
     @ensure_connected
-    async def _send_hello_packet(self, device_id: Optional[str] = None):
+    async def _send_hello_packet(
+        self, device_id: Optional[str] = None
+    ) -> Optional[dict[str, Any]]:
         self._device_id = device_id or f"{uuid.uuid4()}"
         return await self.invoke_method(
             opcode=6,
@@ -378,7 +383,7 @@ class MaxClient:
         return start_auth_response["payload"]["token"]
 
     @ensure_connected
-    async def sign_in(self, sms_token: str, sms_code: int):
+    async def sign_in(self, sms_token: str, sms_code: int) -> dict[str, Any]:
         """
         Auth token for further login is at ['payload']['tokenAttrs']['LOGIN']['token']
         :param login_token: Must be obtained via `send_code`.
@@ -407,7 +412,9 @@ class MaxClient:
         return verification_response
 
     @ensure_connected
-    async def login_by_token(self, token: str, device_id: Optional[str] = None):
+    async def login_by_token(
+        self, token: str, device_id: Optional[str] = None
+    ) -> dict[str, Any]:
         await self._send_hello_packet(device_id)
         _logger.info("using session")
         login_response = await self.invoke_method(

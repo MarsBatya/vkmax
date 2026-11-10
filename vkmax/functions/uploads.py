@@ -1,6 +1,7 @@
 import asyncio
 import re
 from io import BufferedIOBase
+from typing import Any
 
 import aiohttp
 
@@ -71,7 +72,7 @@ class UploadMethods(RawClient):
         self,
         chat_id: int,
         stream: BufferedIOBase,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Uploads one photo from the provided I/O stream
 
         Returns an attachment object to use in vkmax.functions.messages
@@ -84,7 +85,7 @@ class UploadMethods(RawClient):
 
         if not resp:
             raise ValueError("Photo not found")
-        
+
         upload_url = resp["payload"]["url"]
 
         resp = await self._upload(
@@ -106,7 +107,7 @@ class UploadMethods(RawClient):
         self,
         chat_id: int,
         stream: BufferedIOBase,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Uploads one video from the provided I/O stream
 
         Returns an attachment object to use in vkmax.functions.messages
@@ -121,7 +122,7 @@ class UploadMethods(RawClient):
 
         if not resp:
             raise ValueError("Failed to upload video")
-    
+
         info = resp["payload"]["info"][0]
 
         upload_url = info["url"]
@@ -154,7 +155,7 @@ class UploadMethods(RawClient):
         chat_id: int,
         stream: BufferedIOBase,
         filename: str = "file.bin",
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Uploads one file from the provided I/O stream
 
         Returns an attachment object to use in vkmax.functions.messages
@@ -202,7 +203,7 @@ class UploadMethods(RawClient):
         attach_type: str,
         filename: str,
         mimetype: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Posts the stream and returns the parsed JSON response.
 
         The stream belongs to the caller: it is read here but never closed.
