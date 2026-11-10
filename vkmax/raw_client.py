@@ -6,7 +6,7 @@ import ssl
 import uuid
 from copy import deepcopy
 from functools import wraps
-from typing import Any, Awaitable, Callable, Optional, TypedDict, TypeVar
+from typing import Any, Awaitable, Callable, Coroutine, Optional, TypedDict, TypeVar
 
 import aiohttp
 import websockets
@@ -68,6 +68,7 @@ class MaxClient:
         self,
         user_agent_dict: Optional[UserAgentDict] = None,
         proxy_url: Optional[str] = None,
+        request_timeout: float = 30.0,
     ):
         self._connection: Optional[ClientConnection] = None
         self._http_pool: Optional[aiohttp.ClientSession] = None
@@ -78,13 +79,17 @@ class MaxClient:
         self._recv_task: Optional[asyncio.Task] = None
         self._incoming_event_callback = None
         self._reconnect_callback = None
-        self._pending = {}
-        self._video_pending = {}
-        self._file_pending = {}
+        self._pending: dict[int, asyncio.Future] = {}
+        self._video_pending: dict[int, asyncio.Future] = {}
+        self._file_pending: dict[int, asyncio.Future] = {}
+        self._callback_tasks: set[asyncio.Task] = set()
         self.user_agent = (
-            deepcopy(DEFAULT_USER_AGENT_DICT) if user_agent_dict is None else user_agent_dict
+            deepcopy(DEFAULT_USER_AGENT_DICT)
+            if user_agent_dict is None
+            else user_agent_dict
         )
         self.proxy_url = proxy_url
+        self.request_timeout = request_timeout
 
     # --- WebSocket connection management ---
 
@@ -111,6 +116,7 @@ class MaxClient:
         )
 
         self._recv_task = asyncio.create_task(self._recv_loop())
+        self._recv_task.add_done_callback(self._on_task_done)
         _logger.info("Connected. Receive task started.")
         return self._connection
 
@@ -123,14 +129,18 @@ class MaxClient:
             raise RuntimeError("WebSocket not connected. Call .connect() first.")
         return self._connection
 
-    @ensure_connected
     async def disconnect(self):
         await self._stop_keepalive_task()
         if self._recv_task:
             self._recv_task.cancel()
+            await asyncio.gather(self._recv_task, return_exceptions=True)
+            self._recv_task = None
         if self._connection:
             await self._connection.close()
-        self._connection = None
+            self._connection = None
+        self._fail_pending_futures(ConnectionError("client disconnected"))
+        self._is_logged_in = False
+        self._seq = itertools.count(1)
         if self._http_pool:
             await self._http_pool.close()
             self._http_pool = None
@@ -153,22 +163,34 @@ class MaxClient:
         }
         _logger.info(f"-> REQUEST: {request}")
 
-        future = asyncio.get_event_loop().create_future()
+        future = asyncio.get_running_loop().create_future()
         self._pending[seq] = future
 
         try:
             await self.connection.send(json.dumps(request))
         except websockets.exceptions.ConnectionClosed:
+            self._pending.pop(seq, None)
+            future.cancel()
             _logger.warning("got ws disconnect in invoke_method")
             if self._reconnect_callback:
                 _logger.info("reconnecting")
                 await self._reconnect_callback()
                 if retries > 0:
                     _logger.info("retrying invoke_method after reconnect")
-                    await self.invoke_method(opcode, payload, retries - 1)
+                    return await self.invoke_method(opcode, payload, retries - 1)
             return None
 
-        response = await future
+        try:
+            # asyncio.wait, not wait_for: on 3.10 wait_for swallows cancellation
+            # when the future is already done, which livelocks task shutdown.
+            done, _ = await asyncio.wait({future}, timeout=self.request_timeout)
+            if not done:
+                raise TimeoutError(f"no response within {self.request_timeout}s")
+            response = future.result()
+        finally:
+            self._pending.pop(seq, None)
+            if not future.done():
+                future.cancel()
         _logger.info(f"<- RESPONSE: {response}")
 
         return response
@@ -194,54 +216,80 @@ class MaxClient:
         self._reconnect_callback = function
 
     @ensure_connected
-    async def _recv_loop(self):  # noqa: C901
-        while True:
-            try:
-                packet = await self.connection.recv()
-                packet = json.loads(packet)
+    async def _recv_loop(self):
+        try:
+            while True:
+                try:
+                    raw_packet = await self.connection.recv()
+                except websockets.exceptions.ConnectionClosedError as err:
+                    _logger.warning("got ws disconnect in receiver")
+                    if not self._is_logged_in:
+                        raise err
+                    if self._reconnect_callback:
+                        _logger.info("reconnecting")
+                        self._spawn_callback(self._reconnect_callback())
+                    return
+                except websockets.exceptions.ConnectionClosedOK:
+                    # this probably means that user logged out
+                    _logger.warning("connection closed")
+                    return
 
-            except asyncio.CancelledError:
-                _logger.info("receiver cancelled")
-                return
+                try:
+                    packet = json.loads(raw_packet)
+                except json.JSONDecodeError:
+                    _logger.warning("could not decode packet")
+                    continue
 
-            except websockets.exceptions.ConnectionClosedError as err:
-                _logger.warning("got ws disconnect in receiver")
-                if not self._is_logged_in:
-                    raise err
-                if self._reconnect_callback:
-                    _logger.info("reconnecting")
-                    asyncio.create_task(self._reconnect_callback())
-                return
+                if not isinstance(packet, dict):
+                    _logger.warning("could not decode packet")
+                    continue
 
-            except websockets.exceptions.ConnectionClosedOK:
-                # this probably means that user logged out
-                _logger.warning("connection closed")
-                return
+                self._handle_packet(packet)
+        except asyncio.CancelledError:
+            _logger.info("receiver cancelled")
+        finally:
+            self._fail_pending_futures(ConnectionError("WebSocket connection closed"))
 
-            except json.JSONDecodeError:
-                _logger.warning("could not decode packet")
-                continue
-
-            seq = packet["seq"]
-            future = self._pending.pop(seq, None)
-            if future:
+    def _handle_packet(self, packet: dict[str, Any]) -> None:
+        seq = packet.get("seq")
+        future = self._pending.pop(seq, None)
+        if future is not None:
+            if not future.done():
                 future.set_result(packet)
-                continue
+            return
 
-            if packet.get("opcode") == 136:
-                payload = packet.get("payload", {})
-                future = None
+        if packet.get("opcode") == 136:
+            payload = packet.get("payload", {})
+            future = None
 
-                if "videoId" in payload:
-                    future = self._video_pending.pop(payload["videoId"], None)
-                elif "fileId" in payload:
-                    future = self._file_pending.pop(payload["fileId"], None)
+            if "videoId" in payload:
+                future = self._video_pending.pop(payload["videoId"], None)
+            elif "fileId" in payload:
+                future = self._file_pending.pop(payload["fileId"], None)
 
-                if future:
-                    future.set_result(None)
+            if future is not None and not future.done():
+                future.set_result(None)
 
-            if self._incoming_event_callback:
-                asyncio.create_task(self._incoming_event_callback(self, packet))
+        if self._incoming_event_callback:
+            self._spawn_callback(self._incoming_event_callback(self, packet))
+
+    def _spawn_callback(self, coro: Coroutine[Any, Any, Any]) -> asyncio.Task:
+        task = asyncio.create_task(coro)
+        self._callback_tasks.add(task)
+        task.add_done_callback(self._on_task_done)
+        return task
+
+    def _on_task_done(self, task: asyncio.Task) -> None:
+        self._callback_tasks.discard(task)
+        if not task.cancelled() and (error := task.exception()) is not None:
+            _logger.error("background task failed", exc_info=error)
+
+    def _fail_pending_futures(self, error: ConnectionError) -> None:
+        for pending in (self._pending, self._video_pending, self._file_pending):
+            for future in pending.values():
+                if not future.done():
+                    future.set_exception(error)
+            pending.clear()
 
     # --- Keepalive system
 
@@ -258,7 +306,8 @@ class MaxClient:
                 await asyncio.sleep(30)
         except asyncio.CancelledError:
             _logger.info("keepalive task stopped")
-            return
+        except ConnectionError:
+            _logger.warning("keepalive stopped: connection lost")
 
     @ensure_connected
     async def _start_keepalive_task(self):
@@ -270,11 +319,10 @@ class MaxClient:
 
     async def _stop_keepalive_task(self):
         if not self._keepalive_task:
-            raise Exception("Keepalive task is not running")
-
+            return
         self._keepalive_task.cancel()
+        await asyncio.gather(self._keepalive_task, return_exceptions=True)
         self._keepalive_task = None
-        return
 
     # --- Authentication ---
 
