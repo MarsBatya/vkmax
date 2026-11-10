@@ -20,6 +20,20 @@ USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Ge
 
 _logger = logging.getLogger(__name__)
 
+_SENSITIVE_KEYS = frozenset({"token", "phone", "verifyCode"})
+
+
+def _redact(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: "<redacted>" if key in _SENSITIVE_KEYS else _redact(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact(item) for item in value]
+    return value
+
+
 Coro = TypeVar("Coro", bound=Callable[..., Awaitable])
 
 
@@ -161,7 +175,8 @@ class MaxClient:
             "opcode": opcode,
             "payload": payload,
         }
-        _logger.info(f"-> REQUEST: {request}")
+        _logger.info("-> REQUEST: opcode=%s seq=%s", opcode, seq)
+        _logger.debug("-> REQUEST: %s", _redact(request))
 
         future = asyncio.get_running_loop().create_future()
         self._pending[seq] = future
@@ -191,7 +206,19 @@ class MaxClient:
             self._pending.pop(seq, None)
             if not future.done():
                 future.cancel()
-        _logger.info(f"<- RESPONSE: {response}")
+        response_payload = response.get("payload")
+        status = (
+            "error"
+            if isinstance(response_payload, dict) and "error" in response_payload
+            else "ok"
+        )
+        _logger.info(
+            "<- RESPONSE: opcode=%s seq=%s status=%s",
+            response.get("opcode"),
+            response.get("seq"),
+            status,
+        )
+        _logger.debug("<- RESPONSE: %s", _redact(response))
 
         return response
 
@@ -371,16 +398,10 @@ class MaxClient:
         if "error" in verification_response["payload"]:
             raise Exception(verification_response["payload"]["error"])
 
-        try:
-            phone = verification_response["payload"]["profile"]["contact"]["phone"]
-        except Exception:
-            phone = "[?]"
-            _logger.warning("Got no phone number in server response")
-        _logger.info(f"Successfully logged in as {phone}")
-
         self.user_id = verification_response["payload"]["profile"]["contact"]["id"]
         self.phone = verification_response["payload"]["profile"]["contact"]["phone"]
         self._is_logged_in = True
+        _logger.info("Successfully logged in (user_id=%s)", self.user_id)
         await self._start_keepalive_task()
 
         return verification_response
@@ -409,16 +430,10 @@ class MaxClient:
         if "error" in login_response["payload"]:
             raise Exception(login_response["payload"]["error"])
 
-        try:
-            phone = login_response["payload"]["profile"]["contact"]["phone"]
-        except Exception:
-            phone = "[?]"
-            _logger.warning("Got no phone number in server response")
-        _logger.info(f"Successfully logged in as {phone}")
-
         self.user_id = login_response["payload"]["profile"]["contact"]["id"]
         self.phone = login_response["payload"]["profile"]["contact"]["phone"]
         self._is_logged_in = True
+        _logger.info("Successfully logged in (user_id=%s)", self.user_id)
         await self._start_keepalive_task()
 
         return login_response

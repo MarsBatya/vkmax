@@ -95,5 +95,13 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+## Logging and privacy
+
+The client logs through the `vkmax.raw_client` logger. At `INFO` level only
+lifecycle events and request/response metadata (opcode, seq, status) are
+logged. Full payloads are logged at `DEBUG` level with sensitive fields
+(`token`, `phone`, `verifyCode`) replaced by `<redacted>`, so credentials and
+phone numbers never reach the logs at any level.
+
 - [Protocol description](docs/protocol.md)
 - [Known opcodes](docs/opcodes.md)
