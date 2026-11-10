@@ -70,6 +70,44 @@ async def test_remove_admin_payload(make_client):
     ]
 
 
+@pytest.mark.parametrize(
+    ("new_group_name", "new_description", "expected_fields"),
+    [
+        ("New name", None, {"theme": "New name"}),
+        (None, "New description", {"description": "New description"}),
+        ("New name", "New description", {"theme": "New name", "description": "New description"}),
+        ("", "", {"theme": "", "description": ""}),
+    ],
+)
+async def test_change_group_profile_payload(
+    make_client,
+    new_group_name,
+    new_description,
+    expected_fields,
+):
+    client = await make_client()
+
+    await client.change_group_profile(
+        123,
+        new_group_name=new_group_name,
+        new_description=new_description,
+    )
+
+    assert len(client._connection.sent) == 1
+    packet = client._connection.sent[0]
+    assert packet["opcode"] == 55
+    assert packet["payload"] == {"chatId": 123, **expected_fields}
+
+
+async def test_change_group_profile_without_fields_sends_nothing(make_client):
+    client = await make_client()
+
+    result = await client.change_group_profile(123)
+
+    assert result is None
+    assert client._connection.sent == []
+
+
 async def test_join_group_only_subscribes_to_joined_chat(make_client):
     client = await make_client(
         responses=[{"payload": {"chat": {"id": 123, "cid": 456}}}],

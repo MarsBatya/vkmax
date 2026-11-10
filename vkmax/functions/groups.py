@@ -155,28 +155,17 @@ class GroupMethods(RawClient):
         new_description: Optional[str] = None,
     ):
         """Just changes a group public profile"""
-        # TODO XXX Might cause a bug with theme being null. Need to test
 
-        if new_description:
-            await self.invoke_method(
-                opcode=55,
-                payload={
-                    "chatId": group_id,
-                    "theme": new_group_name,
-                },
-            )
+        payload = {"chatId": group_id}
+        if new_group_name is not None:
+            payload["theme"] = new_group_name
+        if new_description is not None:
+            payload["description"] = new_description
 
-        if new_group_name:
-            await self.invoke_method(
-                opcode=55,
-                payload={
-                    "chatId": group_id,
-                    "theme": new_group_name,
-                    "description": new_description,
-                },
-            )
+        if len(payload) == 1:
+            return None
 
-        return
+        return await self.invoke_method(opcode=55, payload=payload)
 
     async def get_group_members(self, group_id: int, marker=0, count=500):
         """
