@@ -348,20 +348,21 @@ class MaxClient:
         _logger.info("keepalive task started")
         try:
             while True:
-                await self._send_keepalive_packet()
+                try:
+                    await self._send_keepalive_packet()
+                except Exception:
+                    # RPC timeouts and send failures must not kill the loop;
+                    # invoke_method already triggers reconnect on send errors.
+                    _logger.warning("keepalive packet failed", exc_info=True)
                 await asyncio.sleep(30)
         except asyncio.CancelledError:
             _logger.info("keepalive task stopped")
-        except ConnectionError:
-            _logger.warning("keepalive stopped: connection lost")
 
     @ensure_connected
     async def _start_keepalive_task(self) -> None:
-        if self._keepalive_task:
-            raise Exception("Keepalive task already started")
-
+        if self._keepalive_task and not self._keepalive_task.done():
+            return
         self._keepalive_task = asyncio.create_task(self._keepalive_loop())
-        return
 
     async def _stop_keepalive_task(self) -> None:
         if not self._keepalive_task:

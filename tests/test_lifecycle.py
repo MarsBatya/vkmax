@@ -281,6 +281,31 @@ async def test_disconnect_stops_keepalive(make_client):
     assert client._keepalive_task is None
 
 
+async def test_keepalive_survives_rpc_timeout(make_client):
+    client = await make_client(RawClient, auto_reply=False)
+    client.request_timeout = 0.05
+    await client._start_keepalive_task()
+    task = client._keepalive_task
+    await wait_until(lambda: client._connection.sent)
+    await asyncio.sleep(0.1)
+
+    assert not task.done()
+
+    await client.disconnect()
+
+
+async def test_start_keepalive_is_idempotent(make_client):
+    client = await make_client(RawClient)
+    await client._start_keepalive_task()
+    task = client._keepalive_task
+
+    await client._start_keepalive_task()
+
+    assert client._keepalive_task is task
+
+    await client.disconnect()
+
+
 async def test_reconnect_after_disconnect(make_client, monkeypatch):
     client = await make_client(RawClient)
     await client.disconnect()
