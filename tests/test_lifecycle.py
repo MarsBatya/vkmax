@@ -298,3 +298,80 @@ async def test_reconnect_after_disconnect(make_client, monkeypatch):
     )
 
     assert response == {"seq": 1, "payload": {"ok": True}}
+
+
+async def test_reconnect_serializes_concurrent_callers(make_client):
+    client = await make_client(RawClient)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def reconnect():
+        nonlocal calls
+        calls += 1
+        started.set()
+        await release.wait()
+        client._reconnect_generation += 1  # simulates a successful connect()
+
+    client.set_reconnect_callback(reconnect)
+    first = asyncio.create_task(client.reconnect())
+    await asyncio.wait_for(started.wait(), timeout=1)
+    second = asyncio.create_task(client.reconnect())
+    await asyncio.sleep(0)
+    release.set()
+    await asyncio.wait_for(asyncio.gather(first, second), timeout=1)
+
+    assert calls == 1
+
+
+async def test_reconnect_retries_after_failed_attempt(make_client):
+    client = await make_client(RawClient)
+    calls = 0
+
+    async def reconnect():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ConnectionError("proxy down")
+
+    client.set_reconnect_callback(reconnect)
+    with pytest.raises(ConnectionError):
+        await client.reconnect()
+    await client.reconnect()
+
+    assert calls == 2
+
+
+async def test_reconnect_without_callback_is_noop(make_client):
+    client = await make_client(RawClient)
+
+    await client.reconnect()
+
+
+async def test_recv_loop_reconnects_on_clean_close(make_client):
+    client = await make_client(RawClient)
+    client._is_logged_in = True
+    called = asyncio.Event()
+
+    async def reconnect():
+        called.set()
+
+    client.set_reconnect_callback(reconnect)
+    client._connection.close_from_server()
+
+    await asyncio.wait_for(called.wait(), timeout=1)
+
+
+async def test_recv_loop_clean_close_without_login_stays_closed(make_client):
+    client = await make_client(RawClient)
+    called = asyncio.Event()
+
+    async def reconnect():
+        called.set()
+
+    client.set_reconnect_callback(reconnect)
+    client._connection.close_from_server()
+    await asyncio.wait_for(client._recv_task, timeout=1)
+    await asyncio.sleep(0)
+
+    assert not called.is_set()

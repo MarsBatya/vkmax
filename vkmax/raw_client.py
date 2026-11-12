@@ -96,6 +96,8 @@ class MaxClient:
         self._recv_task: Optional[asyncio.Task] = None
         self._incoming_event_callback: Optional[PacketCallback] = None
         self._reconnect_callback: Optional[ReconnectCallback] = None
+        self._reconnect_lock = asyncio.Lock()
+        self._reconnect_generation = 0
         self._pending: dict[int, asyncio.Future] = {}
         self._video_pending: dict[int, asyncio.Future] = {}
         self._file_pending: dict[int, asyncio.Future] = {}
@@ -134,6 +136,7 @@ class MaxClient:
 
         self._recv_task = asyncio.create_task(self._recv_loop())
         self._recv_task.add_done_callback(self._on_task_done)
+        self._reconnect_generation += 1
         _logger.info("Connected. Receive task started.")
         return self._connection
 
@@ -192,7 +195,7 @@ class MaxClient:
                 _logger.warning("got ws disconnect in invoke_method")
                 if self._reconnect_callback:
                     _logger.info("reconnecting")
-                    await self._reconnect_callback()
+                    await self.reconnect()
                     if retries > 0:
                         _logger.info("retrying invoke_method after reconnect")
                         return await self.invoke_method(opcode, payload, retries - 1)
@@ -244,23 +247,36 @@ class MaxClient:
             raise TypeError("callback must be async")
         self._reconnect_callback = function
 
+    async def reconnect(self) -> None:
+        """Run the reconnect callback, serialized across concurrent callers.
+
+        Callers that waited on the lock skip the callback if a reconnect
+        already succeeded while they waited (generation changed). A failed
+        attempt leaves the generation unchanged so the next caller retries.
+        """
+        if self._reconnect_callback is None:
+            return
+        generation = self._reconnect_generation
+        async with self._reconnect_lock:
+            if self._reconnect_generation != generation:
+                return
+            await self._reconnect_callback()
+
     @ensure_connected
     async def _recv_loop(self) -> None:
         try:
             while True:
                 try:
                     raw_packet = await self.connection.recv()
-                except websockets.exceptions.ConnectionClosedError as err:
-                    _logger.warning("got ws disconnect in receiver")
+                except websockets.exceptions.ConnectionClosed as err:
                     if not self._is_logged_in:
+                        if isinstance(err, websockets.exceptions.ConnectionClosedOK):
+                            # this probably means that user logged out
+                            _logger.warning("connection closed")
+                            return
                         raise err
-                    if self._reconnect_callback:
-                        _logger.info("reconnecting")
-                        self._spawn_callback(self._reconnect_callback())
-                    return
-                except websockets.exceptions.ConnectionClosedOK:
-                    # this probably means that user logged out
-                    _logger.warning("connection closed")
+                    _logger.warning("got ws disconnect in receiver; reconnecting")
+                    self._spawn_callback(self.reconnect())
                     return
 
                 try:
