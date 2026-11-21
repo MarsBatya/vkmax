@@ -331,6 +331,8 @@ class MaxClient:
                 future.set_result(packet)
             return
 
+        _logger.debug("<- EVENT: %s", _redact(packet))
+
         if packet.get("opcode") == 136:
             payload = packet.get("payload")
             if isinstance(payload, dict):

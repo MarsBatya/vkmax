@@ -4,6 +4,8 @@ import pytest
 
 from vkmax.raw_client import MaxClient as RawClient
 
+from test_lifecycle import wait_until
+
 PHONE = "+79991234567"
 SMS_TOKEN = "sms-token-secret-abc123"  # noqa: S105
 SMS_CODE = "123456"
@@ -164,3 +166,32 @@ def test_redact_masks_sensitive_keys_recursively():
     }
     assert payload["token"] == SMS_TOKEN
     assert payload["profile"]["contact"]["phone"] == PHONE
+
+
+async def test_push_event_debug_log_is_redacted(make_client, caplog):
+    client = await make_client(RawClient, auto_reply=False)
+    received = []
+
+    async def callback(_client, packet):
+        received.append(packet)
+
+    client.set_packet_callback(callback)
+    with caplog.at_level(logging.DEBUG, logger=LOGGER_NAME):
+        client._connection.push_packet(
+            {
+                "opcode": 128,
+                "payload": {
+                    "chatId": 1,
+                    "token": SMS_TOKEN,
+                    "message": {"id": "2", "text": "hi", "phone": PHONE},
+                },
+            }
+        )
+        await wait_until(lambda: received)
+
+    debug_text = logged_text(caplog, logging.DEBUG)
+    assert "<- EVENT" in debug_text
+    assert "<redacted>" in debug_text
+    for secret in (PHONE, SMS_TOKEN):
+        assert secret not in debug_text
+    assert received[0]["payload"]["token"] == SMS_TOKEN
