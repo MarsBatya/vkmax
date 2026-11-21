@@ -62,7 +62,13 @@ async def test_invoke_method_returns_retried_response(make_client):
         timeout=1,
     )
 
-    assert response == {"cmd": 1, "seq": 1, "opcode": 1, "payload": {"ok": True}}
+    assert response == {
+        "ver": 10,
+        "cmd": 1,
+        "seq": 1,
+        "opcode": 1,
+        "payload": {"ok": True},
+    }
     assert dropped.send_attempts == 1
     assert reconnected.sent[0]["payload"] == {"x": 1}
     assert not client._pending
@@ -175,8 +181,16 @@ async def test_recv_loop_survives_malformed_packets(make_client):
         timeout=1,
     )
 
-    assert response == {"cmd": 1, "seq": 1, "opcode": 1, "payload": {"ok": True}}
-    assert received == [{"cmd": 0, "seq": 0, "opcode": 128, "payload": {"text": "hi"}}]
+    assert response == {
+        "ver": 10,
+        "cmd": 1,
+        "seq": 1,
+        "opcode": 1,
+        "payload": {"ok": True},
+    }
+    assert received == [
+        {"ver": 10, "cmd": 0, "seq": 0, "opcode": 128, "payload": {"text": "hi"}}
+    ]
 
 
 async def test_recv_loop_survives_malformed_opcode_136_payload(make_client):
@@ -197,7 +211,7 @@ async def test_recv_loop_survives_malformed_opcode_136_payload(make_client):
     )
 
     assert response["payload"] == {"ok": True}
-    assert received == [{"cmd": 0, "seq": 0, "opcode": 136, "payload": None}]
+    assert received == [{"ver": 10, "cmd": 0, "seq": 0, "opcode": 136, "payload": None}]
 
 
 async def test_done_future_in_pending_does_not_kill_loop(make_client):
@@ -322,7 +336,13 @@ async def test_reconnect_after_disconnect(make_client, monkeypatch):
         timeout=1,
     )
 
-    assert response == {"cmd": 1, "seq": 1, "opcode": 1, "payload": {"ok": True}}
+    assert response == {
+        "ver": 10,
+        "cmd": 1,
+        "seq": 1,
+        "opcode": 1,
+        "payload": {"ok": True},
+    }
 
 
 async def test_reconnect_serializes_concurrent_callers(make_client):

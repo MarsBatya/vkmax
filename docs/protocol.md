@@ -24,6 +24,10 @@ msgpack-encoded int64.
 `seq` is int16: the web client starts at 0 and closes the connection at 32767;
 vkmax wraps back to 1.
 
+`decode_packet` exposes the header as `ver`, `cmd`, `seq`, `opcode` keys
+alongside the decoded `payload`. BigInt ids (e.g. `message.id`,
+`prevMessageId`) arrive as ints, not the strings the JSON transport used.
+
 Reference implementation: `vkmax/packet_codec.py`.
 
 ## Authorization flow

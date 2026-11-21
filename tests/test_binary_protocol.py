@@ -22,6 +22,7 @@ async def test_invoke_method_sends_binary_frames(make_client):
     assert raw[0] == 10
     assert raw[1] == 0
     assert decode_packet(raw) == {
+        "ver": 10,
         "cmd": 0,
         "seq": 1,
         "opcode": 1,

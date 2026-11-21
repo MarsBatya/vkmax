@@ -56,6 +56,7 @@ async def test_remove_admin_payload(make_client):
 
     assert client._connection.sent == [
         {
+            "ver": 10,
             "cmd": 0,
             "seq": 1,
             "opcode": 77,

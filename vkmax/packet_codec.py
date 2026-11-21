@@ -72,6 +72,7 @@ def decode_packet(data: bytes | str) -> dict[str, Any]:
     except (ValueError, lz4.block.LZ4BlockError) as err:
         raise PacketDecodeError(str(err)) from err
     return {
+        "ver": data[0],
         "cmd": data[1],
         "seq": int.from_bytes(data[2:4], "big", signed=True),
         "opcode": int.from_bytes(data[4:6], "big", signed=True),

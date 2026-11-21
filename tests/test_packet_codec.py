@@ -30,6 +30,7 @@ def test_round_trip_uncompressed():
     assert frame[1] == 0
     assert frame[6] == 0
     assert decode_packet(frame) == {
+        "ver": PROTOCOL_VERSION,
         "cmd": 0,
         "seq": 1,
         "opcode": 1,
@@ -44,6 +45,7 @@ def test_round_trip_compressed():
     assert frame[6] > 0
     assert len(frame) - HEADER_SIZE < len(msgpack.packb(payload, use_bin_type=True))
     assert decode_packet(frame) == {
+        "ver": PROTOCOL_VERSION,
         "cmd": 0,
         "seq": 5,
         "opcode": 64,
@@ -95,7 +97,13 @@ def test_seq_and_opcode_are_signed_int16():
     assert decode_packet(frame)["seq"] == 32767
 
     frame = encode_packet(1, -1, -2, {})
-    assert decode_packet(frame) == {"cmd": 1, "seq": -1, "opcode": -2, "payload": {}}
+    assert decode_packet(frame) == {
+        "ver": PROTOCOL_VERSION,
+        "cmd": 1,
+        "seq": -1,
+        "opcode": -2,
+        "payload": {},
+    }
 
 
 def test_seq_overflow_is_rejected():
@@ -112,7 +120,13 @@ def test_decode_tolerates_integer_map_keys():
 def test_empty_body_decodes_to_none():
     frame = bytes([PROTOCOL_VERSION, 1, 0, 0, 0, 6, 0, 0, 0, 0])
 
-    assert decode_packet(frame) == {"cmd": 1, "seq": 0, "opcode": 6, "payload": None}
+    assert decode_packet(frame) == {
+        "ver": PROTOCOL_VERSION,
+        "cmd": 1,
+        "seq": 0,
+        "opcode": 6,
+        "payload": None,
+    }
 
 
 @pytest.mark.parametrize(

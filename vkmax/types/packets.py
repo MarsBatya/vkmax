@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import Any, Literal, Optional, Union, get_args
 
-from adaptix import Chain, Retort, NameStyle, loader, name_mapping
+from adaptix import Chain, P, Retort, NameStyle, bound, loader, name_mapping
+from adaptix.load_error import TypeLoadError
 
 from vkmax.types.messages import (
     Message,
@@ -111,10 +112,43 @@ def packet_loader(data: dict):
     return data
 
 
+# BigInt ids arrive as msgpack ints; the JSON era carried them as strings.
+def _load_message_id(value: Any) -> str:
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return value
+    raise TypeLoadError(str, value)
+
+
+def _load_optional_message_id(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    return _load_message_id(value)
+
+
+def _load_message_ids(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        raise TypeLoadError(list, values)
+    return [_load_message_id(value) for value in values]
+
+
 _retort = Retort(
     recipe=[
         # Global snake_case <-> camelCase conversion
         loader(Packet, packet_loader, chain=Chain.FIRST),
+        *(
+            bound(P[_type].message_id, loader(str, _load_message_id))
+            for _type in get_args(Message)
+        ),
+        *(
+            bound(
+                P[_type].prev_message_id,
+                loader(Optional[str], _load_optional_message_id),
+            )
+            for _type in (Payload, ChatPayload)
+        ),
+        bound(P[DeletedPayload].message_ids, loader(list[str], _load_message_ids)),
         *(
             name_mapping(
                 _type,
