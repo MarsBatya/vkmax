@@ -13,7 +13,7 @@ import websockets
 from python_socks.async_.asyncio import Proxy
 from websockets.asyncio.client import ClientConnection
 
-WS_HOST = "wss://ws-api.oneme.ru/websocket"
+WS_HOST = "wss://api.oneme.ru/websocket"
 RPC_VERSION = 11
 APP_VERSION = "26.2.2"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"  # noqa: E501
@@ -121,7 +121,7 @@ class MaxClient:
         extra_kwargs: dict[str, Any] = {}
         if self.proxy_url:
             proxy = Proxy.from_url(self.proxy_url)
-            sock = await proxy.connect(dest_host="ws-api.oneme.ru", dest_port=443)
+            sock = await proxy.connect(dest_host="api.oneme.ru", dest_port=443)
             extra_kwargs = {
                 "sock": sock,
                 # required when passing a raw socket to wss://

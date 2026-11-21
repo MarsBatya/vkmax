@@ -3,7 +3,7 @@
 ## Overview & Architecture
 
 Async Python (>=3.10) user-client library for the MAX messenger (OneMe), speaking a
-seq-matched JSON-RPC protocol over WebSocket (`wss://ws-api.oneme.ru/websocket`).
+seq-matched JSON-RPC protocol over WebSocket (`wss://api.oneme.ru/websocket`).
 
 - `vkmax/raw_client.py` — base `MaxClient`: connection lifecycle, `invoke_method` RPC,
   auth, keepalive. Owns all pending-future/task state.

@@ -7,7 +7,7 @@ The packet consists of five JSON fields:
 * `payload` (json) - arbitrary
 
 ## Authorization flow
-0. Connect to websocket `wss://ws-api.oneme.ru/websocket`
+0. Connect to websocket `wss://api.oneme.ru/websocket`
 1. Send hello packet:
    ```python
    {
