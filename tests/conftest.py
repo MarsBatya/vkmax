@@ -1,5 +1,4 @@
 import asyncio
-import json
 import socket
 from collections.abc import Iterable
 from typing import Any
@@ -8,6 +7,7 @@ import pytest
 from websockets.exceptions import ConnectionClosedOK
 
 from vkmax.client import MaxClient
+from vkmax.packet_codec import decode_packet, encode_packet
 
 
 class FakeWebSocket:
@@ -17,20 +17,24 @@ class FakeWebSocket:
         auto_reply: bool = True,
     ):
         self.sent: list[dict[str, Any]] = []
+        self.raw_sent: list[bytes] = []
         self.closed = False
         self._responses = iter(responses)
         self._auto_reply = auto_reply
-        self._incoming: asyncio.Queue[str | Exception] = asyncio.Queue()
+        self._incoming: asyncio.Queue[bytes | str | Exception] = asyncio.Queue()
 
-    async def send(self, data: str) -> None:
-        request = json.loads(data)
+    async def send(self, data: bytes) -> None:
+        self.raw_sent.append(data)
+        request = decode_packet(data)
         self.sent.append(request)
         if not self._auto_reply:
             return
         response = next(self._responses, {"payload": {}})
-        self.push_packet({"seq": request["seq"], **response})
+        self.push_packet(
+            {"cmd": 1, "seq": request["seq"], "opcode": request["opcode"], **response}
+        )
 
-    async def recv(self) -> str:
+    async def recv(self) -> bytes | str:
         item = await self._incoming.get()
         if isinstance(item, Exception):
             raise item
@@ -40,9 +44,16 @@ class FakeWebSocket:
         self.closed = True
 
     def push_packet(self, packet: dict[str, Any]) -> None:
-        self._incoming.put_nowait(json.dumps(packet))
+        self._incoming.put_nowait(
+            encode_packet(
+                cmd=packet.get("cmd", 0),
+                seq=packet.get("seq", 0),
+                opcode=packet.get("opcode", 0),
+                payload=packet.get("payload"),
+            )
+        )
 
-    def push_raw(self, raw: str) -> None:
+    def push_raw(self, raw: bytes | str) -> None:
         self._incoming.put_nowait(raw)
 
     def close_from_server(self, error: Exception | None = None) -> None:

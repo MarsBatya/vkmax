@@ -2,5 +2,7 @@ aiohttp
 websockets
 # No stable adaptix 3.x release exists; pinned to the beta the packet retort is tested against.
 adaptix==3.0.0b11
+lz4
+msgpack
 python-socks
 typing-extensions; python_version < "3.11"

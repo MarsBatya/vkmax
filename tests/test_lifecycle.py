@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 
 import pytest
@@ -15,13 +14,13 @@ class DroppingWebSocket(FakeWebSocket):
         super().__init__()
         self.send_attempts = 0
 
-    async def send(self, data: str) -> None:
+    async def send(self, data: bytes) -> None:
         self.send_attempts += 1
         raise ConnectionClosedError(None, None)
 
 
 class RaisingSendWebSocket(FakeWebSocket):
-    async def send(self, data: str) -> None:
+    async def send(self, data: bytes) -> None:
         raise OSError("send failed")
 
 
@@ -63,7 +62,7 @@ async def test_invoke_method_returns_retried_response(make_client):
         timeout=1,
     )
 
-    assert response == {"seq": 1, "payload": {"ok": True}}
+    assert response == {"cmd": 1, "seq": 1, "opcode": 1, "payload": {"ok": True}}
     assert dropped.send_attempts == 1
     assert reconnected.sent[0]["payload"] == {"x": 1}
     assert not client._pending
@@ -164,8 +163,9 @@ async def test_recv_loop_survives_malformed_packets(make_client):
 
     client.set_packet_callback(callback)
     fake = client._connection
-    fake.push_raw("not json")
-    fake.push_raw(json.dumps([1, 2, 3]))
+    fake.push_raw(b"\x0a")
+    fake.push_raw(b"\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x01\xc1")
+    fake.push_raw("text frame")
     fake.push_packet({"opcode": 128, "payload": {"text": "hi"}})
 
     await wait_until(lambda: received)
@@ -175,8 +175,8 @@ async def test_recv_loop_survives_malformed_packets(make_client):
         timeout=1,
     )
 
-    assert response == {"seq": 1, "payload": {"ok": True}}
-    assert received == [{"opcode": 128, "payload": {"text": "hi"}}]
+    assert response == {"cmd": 1, "seq": 1, "opcode": 1, "payload": {"ok": True}}
+    assert received == [{"cmd": 0, "seq": 0, "opcode": 128, "payload": {"text": "hi"}}]
 
 
 async def test_recv_loop_survives_malformed_opcode_136_payload(make_client):
@@ -197,7 +197,7 @@ async def test_recv_loop_survives_malformed_opcode_136_payload(make_client):
     )
 
     assert response["payload"] == {"ok": True}
-    assert received == [{"opcode": 136, "payload": None}]
+    assert received == [{"cmd": 0, "seq": 0, "opcode": 136, "payload": None}]
 
 
 async def test_done_future_in_pending_does_not_kill_loop(make_client):
@@ -322,7 +322,7 @@ async def test_reconnect_after_disconnect(make_client, monkeypatch):
         timeout=1,
     )
 
-    assert response == {"seq": 1, "payload": {"ok": True}}
+    assert response == {"cmd": 1, "seq": 1, "opcode": 1, "payload": {"ok": True}}
 
 
 async def test_reconnect_serializes_concurrent_callers(make_client):

@@ -1,46 +1,63 @@
 ## Protocol
-The packet consists of five JSON fields:
-* `ver` (int) - currently it's 11
-* `seq` (int) - packet incremental ID. Request and response seq match.
-* `cmd` (int[0, 1]) - 0 for outgoing packets, 1 for incoming packets
-* `opcode` (int) - RPC method ID
-* `payload` (json) - arbitrary
+Every WebSocket frame is **binary** (no text frames), big-endian:
+
+| offset | type   | field                                        |
+|--------|--------|----------------------------------------------|
+| 0      | uint8  | protocol version = 10                        |
+| 1      | uint8  | `cmd`                                        |
+| 2-3    | int16  | `seq` - packet incremental ID. Request and response seq match. |
+| 4-5    | int16  | `opcode` - RPC method ID                     |
+| 6      | uint8  | LZ4 ratio (0 = payload uncompressed)         |
+| 7-9    | uint24 | payload length `n`                           |
+| 10..   | n bytes| payload                                      |
+
+The payload is MessagePack (string map keys; decoders must tolerate integer
+keys, i.e. `strict_map_key=False`). MessagePack bodies larger than 32 bytes
+are compressed with LZ4 block format (no size prefix); the ratio byte is
+`min(ceil(original_len / compressed_len), 255)` and decompression uses
+`n * ratio` as the uncompressed-size upper bound. BigInt values (e.g.
+`clientSessionId`) are msgpack ext type 1 whose data is itself a
+msgpack-encoded int64.
+
+`cmd` semantics: 0 = request, 1 = response, 2 = ignored by the web client,
+3 = error packet with `payload.{error,message,localizedMessage,title,description}`.
+`seq` is int16: the web client starts at 0 and closes the connection at 32767;
+vkmax wraps back to 1.
+
+Reference implementation: `vkmax/packet_codec.py`.
 
 ## Authorization flow
 0. Connect to websocket `wss://api.oneme.ru/websocket`
-1. Send hello packet:
+1. Send hello packet (opcode 6) with payload:
    ```python
    {
     "userAgent": {
         "deviceType": "WEB",
+        "pushDeviceType": "WEBPUSH",
         "locale": "ru_RU",
         "osVersion": "macOS",
         "deviceName": "vkmax Python",
         "headerUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
         "deviceLocale": "ru-RU",
+        "isPwa": False,
         "appVersion": APP_VERSION,
         "screen": "956x1470 2.0x",
         "timezone": "Asia/Vladivostok"
        },
-    "deviceId": str(uuid.uuid4())
+    "deviceId": str(uuid.uuid4()),
+    "clientSessionId": ExtType(1, msgpack.packb(int(time.time() * 1000)))
    }
    ```
-3. Start auth:
+3. Start auth (opcode 17) with payload:
    ```python
    {
-       "ver":11,
-       "cmd":0,
-       "seq":1,
-       "opcode":17,
-       "payload":{
-          "phone":"phone",
-          "type":"START_AUTH",
-          "language":"ru"
-       }
-    }
+      "phone":"phone",
+      "type":"START_AUTH",
+      "language":"ru"
+   }
    ```
    After that websocket sends a packet with sms_token to client
-4. Confirm SMS code:
+4. Confirm SMS code (opcode 18) with payload:
    ```python
    {
     "token": sms_token,
@@ -50,33 +67,19 @@ The packet consists of five JSON fields:
    ```
    Now you are logged in.
 ## Client flow
-Baseline packet looks like:
-```python
-{
-   "ver": RPC_VERSION,
-   "cmd": 0, 
-   "seq": seq,
-   "opcode": opcode,
-   "payload": payload
-}
-```
+Requests are sent as binary frames with `cmd=0` and an increasing `seq`;
+the payload is an arbitrary MessagePack map.\
 Known opcodes are listed in `opcodes.md` file.\
-Example of using baseline packet to send message:
+Example payload for sending a message (opcode 64):
 ```python
 {
-  "ver": 11,
-  "cmd": 0,
-  "seq": seq,
-  "opcode": 64,
-  "payload": {
-    "chatId": to_chat_id,
-    "message": {
-      "text": "text you need to send",
-      "cid": 175xxxxxxxxxx,
-      "elements": [],
-      "attaches": []
-    },
-    "notify": true
-  }
+  "chatId": to_chat_id,
+  "message": {
+    "text": "text you need to send",
+    "cid": 175xxxxxxxxxx,
+    "elements": [],
+    "attaches": []
+  },
+  "notify": true
 }
 ```

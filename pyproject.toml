@@ -23,6 +23,8 @@ dependencies = [
     "websockets",
     # No stable adaptix 3.x release exists; pinned to the beta the packet retort is tested against.
     "adaptix==3.0.0b11",
+    "lz4",
+    "msgpack",
     "python-socks",
     "typing-extensions; python_version < '3.11'",
 ]
@@ -50,6 +52,10 @@ filterwarnings = ["error::ResourceWarning"]
 [tool.mypy]
 python_version = "3.10"
 files = ["vkmax"]
+
+[[tool.mypy.overrides]]
+module = ["lz4.*", "msgpack.*"]
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py310"

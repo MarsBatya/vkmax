@@ -11,7 +11,7 @@ async def test_fake_websocket_round_trip(make_client):
 
     response = await client.invoke_method(opcode=1, payload={"interactive": False})
 
-    assert response == {"seq": 1, "payload": {"ok": True}}
+    assert response == {"cmd": 1, "seq": 1, "opcode": 1, "payload": {"ok": True}}
     assert client._connection.sent[0]["payload"] == {"interactive": False}
     assert not client._pending
 

@@ -1,21 +1,34 @@
 import asyncio
 import itertools
-import json
 import logging
 import ssl
+import sys
+import time
 import uuid
 from copy import deepcopy
 from functools import wraps
 from typing import Any, Awaitable, Callable, Coroutine, Optional, TypedDict, TypeVar
+
+if sys.version_info >= (3, 11):
+    from typing import NotRequired
+else:
+    from typing_extensions import NotRequired
 
 import aiohttp
 import websockets
 from python_socks.async_.asyncio import Proxy
 from websockets.asyncio.client import ClientConnection
 
+from vkmax.packet_codec import (
+    MAX_SEQ,
+    PacketDecodeError,
+    decode_packet,
+    encode_packet,
+    pack_bigint,
+)
+
 WS_HOST = "wss://api.oneme.ru/websocket"
-RPC_VERSION = 11
-APP_VERSION = "26.2.2"
+APP_VERSION = "26.11.9"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"  # noqa: E501
 
 _logger = logging.getLogger(__name__)
@@ -35,6 +48,15 @@ def _redact(value: Any) -> Any:
 
 
 Coro = TypeVar("Coro", bound=Callable[..., Awaitable])
+
+
+class RpcError(Exception):
+    """Server error packet (cmd=3)."""
+
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+        super().__init__(payload.get("message") or payload.get("error") or "RPC error")
+
 
 PacketCallback = Callable[["MaxClient", dict[str, Any]], Coroutine[Any, Any, Any]]
 ReconnectCallback = Callable[[], Coroutine[Any, Any, Any]]
@@ -60,16 +82,20 @@ class UserAgentDict(TypedDict):
     appVersion: str
     screen: str
     timezone: str
+    pushDeviceType: NotRequired[str]
+    isPwa: NotRequired[bool]
 
 
 DEFAULT_USER_AGENT_DICT = UserAgentDict(
     {
         "deviceType": "WEB",
+        "pushDeviceType": "WEBPUSH",
         "locale": "ru",
         "deviceLocale": "ru",
         "osVersion": "Linux",
         "deviceName": "Chrome",
         "headerUserAgent": USER_AGENT,
+        "isPwa": False,
         "appVersion": APP_VERSION,
         "screen": "1080x1920 1.0x",
         "timezone": "Europe/Moscow",
@@ -173,9 +199,12 @@ class MaxClient:
         retries: int = 2,
     ) -> Optional[dict[str, Any]]:
         seq = next(self._seq)
+        if seq > MAX_SEQ:
+            # seq is int16 on the wire; wrap before it overflows
+            self._seq = itertools.count(1)
+            seq = next(self._seq)
 
         request = {
-            "ver": RPC_VERSION,
             "cmd": 0,
             "seq": seq,
             "opcode": opcode,
@@ -189,7 +218,7 @@ class MaxClient:
 
         try:
             try:
-                await self.connection.send(json.dumps(request))
+                await self.connection.send(encode_packet(0, seq, opcode, payload))
             except websockets.exceptions.ConnectionClosed:
                 future.cancel()
                 _logger.warning("got ws disconnect in invoke_method")
@@ -224,6 +253,9 @@ class MaxClient:
             status,
         )
         _logger.debug("<- RESPONSE: %s", _redact(response))
+
+        if response.get("cmd") == 3:
+            raise RpcError(response.get("payload") or {})
 
         return response
 
@@ -272,7 +304,7 @@ class MaxClient:
                     if not self._is_logged_in:
                         if isinstance(err, websockets.exceptions.ConnectionClosedOK):
                             # this probably means that user logged out
-                            _logger.warning("connection closed")
+                            _logger.warning("connection closed: %s", err)
                             return
                         raise err
                     _logger.warning("got ws disconnect in receiver; reconnecting")
@@ -280,12 +312,8 @@ class MaxClient:
                     return
 
                 try:
-                    packet = json.loads(raw_packet)
-                except json.JSONDecodeError:
-                    _logger.warning("could not decode packet")
-                    continue
-
-                if not isinstance(packet, dict):
+                    packet = decode_packet(raw_packet)
+                except PacketDecodeError:
                     _logger.warning("could not decode packet")
                     continue
 
@@ -383,6 +411,7 @@ class MaxClient:
             payload={
                 "userAgent": self.user_agent,
                 "deviceId": self._device_id,
+                "clientSessionId": pack_bigint(int(time.time() * 1000)),
             },
         )
 

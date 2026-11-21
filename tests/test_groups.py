@@ -56,7 +56,6 @@ async def test_remove_admin_payload(make_client):
 
     assert client._connection.sent == [
         {
-            "ver": 11,
             "cmd": 0,
             "seq": 1,
             "opcode": 77,
@@ -75,7 +74,11 @@ async def test_remove_admin_payload(make_client):
     [
         ("New name", None, {"theme": "New name"}),
         (None, "New description", {"description": "New description"}),
-        ("New name", "New description", {"theme": "New name", "description": "New description"}),
+        (
+            "New name",
+            "New description",
+            {"theme": "New name", "description": "New description"},
+        ),
         ("", "", {"theme": "", "description": ""}),
     ],
 )
